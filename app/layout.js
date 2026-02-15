@@ -18,11 +18,11 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="ja">
+    <html lang="ja" style={{ overflow: "hidden", height: "100dvh" }}>
       <head>
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body style={{ margin: 0, padding: 0, backgroundColor: "#0f172a", paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <body style={{ margin: 0, padding: 0, backgroundColor: "#0f172a", paddingBottom: "env(safe-area-inset-bottom)", overflow: "hidden", height: "100dvh", position: "fixed", width: "100%", overscrollBehavior: "none" }}>
         {children}
         <script
           dangerouslySetInnerHTML={{
