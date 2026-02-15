@@ -623,7 +623,7 @@ export default function Roguelike(){
   // ===== TITLE =====
   if(screen==="title"){
     return(
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:"linear-gradient(170deg,#0f172a 0%,#1a2332 50%,#0f172a 100%)",color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',sans-serif",padding:32,textAlign:"center"}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:"linear-gradient(170deg,#0f172a 0%,#1a2332 50%,#0f172a 100%)",color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',sans-serif",padding:32,paddingTop:"max(32px, env(safe-area-inset-top))",textAlign:"center",boxSizing:"border-box"}}>
         <div style={{fontSize:56,marginBottom:16,filter:"drop-shadow(0 4px 12px rgba(251,191,36,0.3))"}}>⚔️</div>
         <h1 style={{fontSize:28,fontWeight:800,color:"#fbbf24",margin:"0 0 6px",letterSpacing:"0.05em"}}>不思議のダンジョン</h1>
         <p style={{fontSize:13,color:"#64748b",marginBottom:40,letterSpacing:"0.1em"}}>全{MAX_FLOOR}階を踏破せよ</p>
@@ -644,7 +644,7 @@ export default function Roguelike(){
   // ===== GAME OVER =====
   if(g.gameOver){
     return(
-      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:g.victory?"linear-gradient(170deg,#1a1a2e,#16213e)":"linear-gradient(170deg,#1a0a0a,#2d1b1b)",color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',sans-serif",padding:32,textAlign:"center"}}>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:g.victory?"linear-gradient(170deg,#1a1a2e,#16213e)":"linear-gradient(170deg,#1a0a0a,#2d1b1b)",color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',sans-serif",padding:32,paddingTop:"max(32px, env(safe-area-inset-top))",textAlign:"center",boxSizing:"border-box"}}>
         <div style={{fontSize:56,marginBottom:16}}>{g.victory?"🏆":"💀"}</div>
         <h2 style={{fontSize:22,fontWeight:800,color:g.victory?"#fbbf24":"#f87171",marginBottom:20}}>{g.victory?"ダンジョン制覇！":"冒険は終わった..."}</h2>
         <div style={{background:"rgba(255,255,255,0.04)",borderRadius:16,padding:"20px 32px",marginBottom:28,fontSize:14,lineHeight:2.2,border:"1px solid rgba(255,255,255,0.06)"}}>
@@ -715,7 +715,7 @@ export default function Roguelike(){
 
   return(
     <div onTouchStart={handleTS} onTouchEnd={handleTE}
-      style={{display:"flex",flexDirection:"column",height:"100dvh",background:`linear-gradient(180deg,${theme.bg[0]},${theme.bg[1]})`,color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',monospace",overflow:"hidden",userSelect:"none",WebkitUserSelect:"none"}}>
+      style={{display:"flex",flexDirection:"column",height:"100dvh",paddingTop:"env(safe-area-inset-top)",background:`linear-gradient(180deg,${theme.bg[0]},${theme.bg[1]})`,color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',monospace",overflow:"hidden",userSelect:"none",WebkitUserSelect:"none",boxSizing:"border-box"}}>
 
       {/* ── HEADER (fixed) ── */}
       <div style={{flexShrink:0,width:"100%",padding:"6px 12px 4px",boxSizing:"border-box"}}>
