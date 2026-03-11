@@ -805,7 +805,7 @@ export default function Roguelike(){
                   {g.inventory.length<MAX_INV&&<button onClick={()=>{setG(prev=>{
                     if(!prev||prev.gameOver)return prev;
                     let s={...prev,items:prev.items.filter(it=>it.id!==fi.id),inventory:[...prev.inventory,{...fi}],fx:[]};
-                    s.msgs=addMsg(s,`${fi.name}を拾った`);s.pendingSfx="item";return endTurn(s);});}}
+                    s.msgs=addMsg(s,`${fi.name}を拾った`);s.pendingSfx="item";return endTurn(s);});setModal(null);}}
                     style={{padding:"4px 10px",fontSize:10,fontWeight:600,border:"none",borderRadius:6,cursor:"pointer",background:"#16a34a",color:"#fff"}}>拾う</button>}
                 </div>))}
             </div>);})()}
@@ -821,7 +821,7 @@ export default function Roguelike(){
                 {item.category==="throw"&&<button onClick={()=>{setThrowMode({itemIdx:i});setModal(null);}} style={{padding:"6px 10px",fontSize:10,fontWeight:600,border:"none",borderRadius:8,cursor:"pointer",background:"#dc2626",color:"#fff"}}>投</button>}
                 <button onClick={()=>{useItem(i);setModal(null);}} style={{padding:"6px 10px",fontSize:10,fontWeight:600,border:"none",borderRadius:8,cursor:"pointer",
                   background:item.category==="equipment"?"#4f46e5":"#16a34a",color:"#fff"}}>{item.category==="equipment"?"装備":"使う"}</button>
-                <button onClick={()=>{dropItem(i);}} style={{padding:"6px 10px",fontSize:10,fontWeight:600,border:"none",borderRadius:8,cursor:"pointer",background:"rgba(255,255,255,0.06)",color:"#94a3b8"}}>捨</button>
+                <button onClick={()=>{dropItem(i);setModal(null);}} style={{padding:"6px 10px",fontSize:10,fontWeight:600,border:"none",borderRadius:8,cursor:"pointer",background:"rgba(255,255,255,0.06)",color:"#94a3b8"}}>捨</button>
               </div>
             </div>))}
         <button onClick={()=>{setModal(null);setThrowMode(null);}} style={{marginTop:14,padding:"10px",fontSize:13,fontWeight:600,background:"rgba(255,255,255,0.06)",color:"#94a3b8",border:"none",borderRadius:10,cursor:"pointer",width:"100%"}}>閉じる</button>
