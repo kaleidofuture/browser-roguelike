@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { MAP_W, MAP_H, WALL, VP, VP_HALF, rand, MAX_FLOOR, MAX_INV, MAX_FULL, MAX_MP, DIRS_8, DIR_LABELS } from "./game/constants";
 import { getTheme, STATUS_INFO, SKILLS, SHOP_ITEMS, ENEMY_POOLS, CONSUMABLES, THROW_ITEMS, WEAPONS, ARMORS, THEMES, TRAP_TYPES } from "./game/data";
-import { initAudio, sfx } from "./game/audio";
+import { initAudio, sfx, playBgm, stopBgm, playFloorBgm } from "./game/audio";
 import { calcVis } from "./game/dungeon";
 import { initState, getAtk, getDef, addMsg, addStatus, tickStatuses, killCheck, levelUp, nextFloor, applyTrap, applyFull, applyPStatus, checkEvents, moveEnemies } from "./game/state";
 import { Bar } from "./ui/Bar";
@@ -12,7 +12,7 @@ import { TILE_SPRITES, ENEMY_SPRITES, ITEM_SPRITES, EQUIP_SPRITES, THEME_FILTERS
 
 export default function Roguelike(){
   const [g,setG]=useState(null);
-  const [screen,setScreen]=useState("title");
+  const [screen,setScreen]=useState("splash");
   const [modal,setModal]=useState(null);
   const [throwMode,setThrowMode]=useState(null);
   const [skillDir,setSkillDir]=useState(null);
@@ -24,6 +24,7 @@ export default function Roguelike(){
   const [btnLayout,setBtnLayout]=useState(["map","sound","inv","skill"]);
   const [showConfig,setShowConfig]=useState(false);
   const [libTab,setLibTab]=useState("enemy");
+  const [previewBgm,setPreviewBgm]=useState(null);
   const [configSlot,setConfigSlot]=useState(null);
   useEffect(()=>{(async()=>{try{const r=await window.storage.get("rl_btnLayout");if(r?.value)setBtnLayout(JSON.parse(r.value));}catch{}})();},[]);
   const saveBtnLayout=async(layout)=>{setBtnLayout(layout);try{await window.storage.set("rl_btnLayout",JSON.stringify(layout));}catch{};};
@@ -45,7 +46,7 @@ export default function Roguelike(){
     try{await window.storage.set("rl_scores3",JSON.stringify(ns));}catch{}};
   const saveScoreRef=useRef(saveScoreFn);saveScoreRef.current=saveScoreFn;
   const saveScore=useCallback((st)=>saveScoreRef.current(st),[]);
-  const startGame=()=>{if(soundOn)initAudio();setG(initState());setScreen("game");setModal(null);setThrowMode(null);setSkillDir(null);};
+  const startGame=()=>{if(soundOn)initAudio();setG(initState());setScreen("game");setModal(null);setThrowMode(null);setSkillDir(null);if(soundOn)playFloorBgm(1);};
 
   // 1ターン消費して敵行動まで進める共通処理
   const endTurn=(s)=>{s={...s,turns:s.turns+1};s=applyPStatus(s,saveScore);if(s.gameOver)return s;s=applyFull(s,saveScore);if(s.gameOver)return s;return moveEnemies(s,saveScore);};
@@ -163,6 +164,14 @@ export default function Roguelike(){
     s=applyPStatus(s,saveScore);if(s.gameOver)return s;s=applyFull(s,saveScore);if(s.gameOver)return s;return moveEnemies(s,saveScore);});},[]);
 
   useEffect(()=>{if(g?.pendingSfx&&soundOn)sfx(g.pendingSfx);},[g?.pendingSfx,g?.turns,soundOn]);
+  // BGM: switch on floor change, stop on game over
+  useEffect(()=>{if(!soundOn){stopBgm();return;}
+    if(screen==="title")return;
+    if(g?.gameOver){stopBgm();return;}
+    if(g?.floor)playFloorBgm(g.floor);
+  },[g?.floor,g?.gameOver,soundOn,screen]);
+  // BGM: play title BGM when on title (only works after audio initialized)
+  useEffect(()=>{if(screen==="title"&&soundOn)playBgm("title");else if(screen==="title")stopBgm();},[screen,soundOn]);
   useEffect(()=>{const onKey=e=>{if(modal||throwMode||skillDir)return;
     const km={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0],q:[-1,-1],e:[1,-1],z:[-1,1],c:[1,1]};
     if(km[e.key]){e.preventDefault();processTurn(...km[e.key]);}if(e.key===" "||e.key===".")processTurn(0,0);
@@ -192,6 +201,23 @@ export default function Roguelike(){
     return <span style={{color:item.color,marginRight:6,fontSize:size*0.7}}>{item.char}</span>;
   };
 
+  // ===== SPLASH =====
+  if(screen==="splash"){
+    return(
+      <div onClick={()=>{if(soundOn){initAudio();playBgm("title");}setScreen("title");}}
+        style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:"linear-gradient(170deg,#0f172a 0%,#1a2332 50%,#0f172a 100%)",color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',sans-serif",cursor:"pointer",userSelect:"none",WebkitUserSelect:"none",position:"relative",overflow:"hidden"}}>
+        <style>{`@keyframes splash-blink{0%,100%{opacity:0.4}50%{opacity:1}}@keyframes splash-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}`}</style>
+        <div style={{marginBottom:24,animation:"splash-float 3s ease-in-out infinite",filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.6))"}}>
+          <img src={PLAYER_SPRITE} alt="" style={{width:64,height:96,imageRendering:"pixelated"}}/>
+        </div>
+        <div style={{fontSize:14,color:"#94a3b8",letterSpacing:"0.15em",animation:"splash-blink 2s ease-in-out infinite"}}>- Tap to Start -</div>
+        <div style={{position:"absolute",bottom:20,textAlign:"center",lineHeight:1.8}}>
+          <div style={{fontSize:10,color:"#cbd5e1",letterSpacing:"0.05em"}}>&copy; 2026 KaleidoFuture</div>
+          <div style={{fontSize:8,color:"#94a3b8"}}>Sprites: 0x72 DungeonTileset II (CC0) | Audio: Tone.js (MIT)</div>
+        </div>
+      </div>);
+  }
+
   // ===== TITLE =====
   if(screen==="title"){
     return(
@@ -202,12 +228,39 @@ export default function Roguelike(){
           @keyframes title-torch{0%,100%{opacity:0.6;transform:scaleY(1)}50%{opacity:1;transform:scaleY(1.1)}}
           @keyframes title-btn{0%,100%{box-shadow:0 6px 24px rgba(245,158,11,0.35)}50%{box-shadow:0 6px 32px rgba(245,158,11,0.55)}}
           @keyframes title-particle{0%{opacity:0;transform:translateY(0)}20%{opacity:0.6}100%{opacity:0;transform:translateY(-60px)}}
+          @keyframes sparkle{0%{opacity:0;transform:scale(0) rotate(0deg)}25%{opacity:1;transform:scale(1) rotate(90deg)}50%{opacity:0.6;transform:scale(0.6) rotate(180deg)}75%{opacity:1;transform:scale(1) rotate(270deg)}100%{opacity:0;transform:scale(0) rotate(360deg)}}
+          @keyframes sparkle-drift{0%{transform:translateY(0)}100%{transform:translateY(-20px)}}
+          @keyframes shooting-star{0%{opacity:0;transform:translateX(0) translateY(0)}10%{opacity:1}70%{opacity:0.6}100%{opacity:0;transform:translateX(var(--ss-dx)) translateY(var(--ss-dy))}}
         `}</style>
-        {/* Ambient particles */}
-        {[...Array(8)].map((_,i)=><div key={i} style={{position:"absolute",width:3,height:3,borderRadius:"50%",background:"rgba(251,191,36,0.4)",
-          left:`${15+i*10}%`,bottom:"10%",animation:`title-particle ${2+i*0.3}s ease-out ${i*0.4}s infinite`}}/>)}
+        {/* Sparkle particles */}
+        {[...Array(24)].map((_,i)=>{const colors=["#fbbf24","#f59e0b","#fcd34d","#fff7ed","#67e8f9","#a78bfa"];
+          return <div key={`sp${i}`} style={{position:"absolute",
+            left:`${30+((i*17+3)%40)}%`,top:`${10+((i*31+7)%80)}%`,
+            width:i%3===0?6:4,height:i%3===0?6:4,
+            animation:`sparkle ${2.5+i*0.4}s ease-in-out ${i*0.3}s infinite, sparkle-drift ${4+i*0.5}s ease-in-out ${i*0.2}s infinite alternate`,
+          }}>
+            <div style={{width:"100%",height:"100%",position:"relative"}}>
+              <div style={{position:"absolute",top:"50%",left:0,right:0,height:1,background:colors[i%colors.length],borderRadius:1,transform:"translateY(-50%)"}}/>
+              <div style={{position:"absolute",left:"50%",top:0,bottom:0,width:1,background:colors[i%colors.length],borderRadius:1,transform:"translateX(-50%)"}}/>
+            </div>
+          </div>;})}
+        {/* Shooting stars */}
+        {[...Array(8)].map((_,i)=>{const angles=[25,35,20,40,30,22,38,28];const dists=[90,130,110,100,120,85,140,95];
+          const dx=Math.round(Math.cos(angles[i]*Math.PI/180)*dists[i]);
+          const dy=Math.round(Math.sin(angles[i]*Math.PI/180)*dists[i]);
+          const lefts=[42,50,44,52,40,48,51,45];const tops=[8,25,50,15,65,40,5,55];
+          const col=["#fbbf24","#67e8f9","#fcd34d","#a78bfa","#f59e0b","#fff7ed","#67e8f9","#fcd34d"][i];
+          const sz=3+i%2;
+          return <div key={`ss${i}`} style={{position:"absolute",
+          left:`${lefts[i]}%`,top:`${tops[i]}%`,
+          width:sz,height:sz,borderRadius:"50%",
+          background:col,boxShadow:`0 0 4px ${col}, 0 0 8px ${col}`,
+          opacity:0,
+          '--ss-dx':`${dx}px`,'--ss-dy':`${dy}px`,
+          animation:`shooting-star ${1.2+i*0.15}s ease-in ${0.3+i*1.1}s infinite`,
+        }}/>;})}
         {/* Floor tiles decoration */}
-        <div style={{position:"absolute",bottom:0,left:0,right:0,height:80,display:"flex",justifyContent:"center",gap:0,opacity:0.15}}>
+        <div style={{position:"absolute",bottom:0,left:0,right:0,height:80,display:"flex",justifyContent:"center",gap:0,opacity:0.9}}>
           {[...Array(12)].map((_,i)=><div key={i} style={{width:32,height:32,backgroundImage:`url(${SHEET_URL})`,backgroundPosition:`-${16*2}px -${64}px`,backgroundSize:`${SHEET_W*2}px ${SHEET_H*2}px`,imageRendering:"pixelated"}}/>)}
         </div>
         {/* Hero sprite */}
@@ -228,10 +281,10 @@ export default function Roguelike(){
               <span>#{i+1} {s.victory?"🏆":"💀"} B{s.floor}F Lv{s.level}</span><span style={{color:"#64748b"}}>{s.turns}T {s.date}</span></div>)}
           <button onClick={()=>setModal(null)} style={{marginTop:16,padding:"10px",fontSize:13,fontWeight:600,background:"rgba(255,255,255,0.06)",color:"#94a3b8",border:"none",borderRadius:10,cursor:"pointer",width:"100%"}}>閉じる</button>
         </Overlay>}
-        {modal==="library"&&<Overlay onClose={()=>setModal(null)}>
+        {modal==="library"&&<Overlay onClose={()=>{if(previewBgm){stopBgm();setPreviewBgm(null);playBgm("title");}setModal(null);}}>
           <h3 style={{color:"#fbbf24",margin:"0 0 12px",fontSize:16,fontWeight:700}}>📖 ライブラリ</h3>
           <div style={{display:"flex",gap:4,marginBottom:12}}>
-            {[["enemy","エネミー"],["item","アイテム"],["equip","装備"],["trap","トラップ"]].map(([k,l])=>(
+            {[["enemy","エネミー"],["item","アイテム"],["equip","装備"],["trap","トラップ"],["bgm","BGM"]].map(([k,l])=>(
               <button key={k} onClick={()=>{setLibTab(k);const el=document.getElementById('lib-scroll');if(el)el.scrollTop=0;}} style={{flex:1,padding:"8px 0",fontSize:11,fontWeight:600,border:"none",borderRadius:8,cursor:"pointer",
                 background:libTab===k?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.04)",color:libTab===k?"#fbbf24":"#64748b"}}>{l}</button>
             ))}
@@ -313,8 +366,30 @@ export default function Roguelike(){
                   </div>
                 </div>))}
             </>}
+            {libTab==="bgm"&&<>
+              {[{key:"title",name:"冒険の始まり",desc:"タイトル画面",color:"#fbbf24",icon:"🏰"},
+                {key:"cave",name:"暗闇の洞窟",desc:"B1-2F 洞窟",color:"#94a3b8",icon:"🕯"},
+                {key:"forest",name:"緑の回廊",desc:"B3-4F 森林",color:"#4ade80",icon:"🌿"},
+                {key:"ice",name:"凍てつく深淵",desc:"B5-6F 氷穴",color:"#67e8f9",icon:"❄"},
+                {key:"lava",name:"灼熱の炉",desc:"B7-8F 溶岩",color:"#fb923c",icon:"🔥"},
+                {key:"dark",name:"終焉の闇",desc:"B9-10F 闇域",color:"#a78bfa",icon:"🌑"},
+              ].map((bgm,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                  <div style={{width:32,height:32,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,background:"rgba(0,0,0,0.3)",borderRadius:6}}>
+                    {bgm.icon}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:bgm.color}}>{bgm.name}</div>
+                    <div style={{fontSize:10,color:"#64748b"}}>{bgm.desc}</div>
+                  </div>
+                  <button onClick={()=>{initAudio();if(previewBgm===bgm.key){stopBgm();setPreviewBgm(null);}else{playBgm(bgm.key);setPreviewBgm(bgm.key);}}}
+                    style={{padding:"6px 12px",fontSize:10,fontWeight:600,border:"none",borderRadius:8,cursor:"pointer",
+                    background:previewBgm===bgm.key?"#dc2626":"rgba(255,255,255,0.08)",color:previewBgm===bgm.key?"#fff":"#94a3b8"}}>
+                    {previewBgm===bgm.key?"■ 停止":"▶ 再生"}</button>
+                </div>))}
+            </>}
           </div>
-          <button onClick={()=>setModal(null)} style={{marginTop:14,padding:"10px",fontSize:13,fontWeight:600,background:"rgba(255,255,255,0.06)",color:"#94a3b8",border:"none",borderRadius:10,cursor:"pointer",width:"100%"}}>閉じる</button>
+          <button onClick={()=>{if(previewBgm){stopBgm();setPreviewBgm(null);playBgm("title");}setModal(null);}} style={{marginTop:14,padding:"10px",fontSize:13,fontWeight:600,background:"rgba(255,255,255,0.06)",color:"#94a3b8",border:"none",borderRadius:10,cursor:"pointer",width:"100%"}}>閉じる</button>
         </Overlay>}
       </div>);
   }
