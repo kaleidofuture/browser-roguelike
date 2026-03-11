@@ -33,15 +33,6 @@ function roomVis(vis,room){
       if(rx>=0&&rx<MAP_W&&ry>=0&&ry<MAP_H) vis.add(`${rx},${ry}`);
     }
   }
-  for(let rx=room.x;rx<room.x+room.w;rx++){
-    if(room.y-1>=0&&rx>=0&&rx<MAP_W){
-      const wy=room.y-1;
-      if(wy>=0&&wy<MAP_H&&rx>=0&&rx<MAP_W){
-        if(wy-1>=0&&rx>=0&&rx<MAP_W&&wy-1<MAP_H&&FLOOR===1) {
-        }
-      }
-    }
-  }
 }
 
 // Main visibility function

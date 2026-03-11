@@ -22,7 +22,7 @@ export const TILE_SPRITES = {
   wall_right: [48, 16, 16, 16],
   wall_top_mid: [32, 0, 16, 16],
   // Special
-  stairs: [80, 192, 16, 16],   // floor_stairs
+  stairs: [80, 176, 16, 16],   // stairs_down
   spikes: [16, 192, 16, 16],   // floor_spikes (trap)
   hole: [96, 144, 16, 16],
   // Items (16x16)
@@ -51,52 +51,54 @@ export const TILE_SPRITES = {
 
 // Enemy char -> individual frame PNG mapping
 export const ENEMY_SPRITES = {
-  'ス': '/sprites/enemy_slime.png',     // スライム
-  '蝙': '/sprites/enemy_bat.png',       // コウモリ
-  '蛇': '/sprites/enemy_snake.png',     // 毒蛇
-  '鬼': '/sprites/enemy_goblin.png',    // ゴブリン
-  '弓': '/sprites/enemy_archer.png',    // 弓兵
-  '花': '/sprites/enemy_flower.png',    // 眠り花
-  '狼': '/sprites/enemy_wolf.png',      // 狼
-  '氷': '/sprites/enemy_ice.png',       // 氷精
-  '雪': '/sprites/enemy_yeti.png',      // 雪男
-  '術': '/sprites/enemy_mage.png',      // 魔術師
-  '竜': '/sprites/enemy_dragon.png',    // 炎竜
-  '爆': '/sprites/enemy_bomber.png',    // 爆弾魔
-  '溶': '/sprites/enemy_lava.png',      // 溶岩獣
-  '召': '/sprites/enemy_summoner.png',  // 召喚師
-  '闇': '/sprites/enemy_dark.png',      // 闇王
-  '死': '/sprites/enemy_reaper.png',    // 死神
-  '魔': '/sprites/enemy_demon.png',     // 魔竜
+  'ス': '/sprites/enemy_slime.png',     // マディ (muddy)
+  '蝙': '/sprites/enemy_bat.png',       // インプ (imp)
+  '蛇': '/sprites/enemy_snake.png',     // スワンピー (swampy)
+  '鬼': '/sprites/enemy_goblin.png',    // ゴブリン (goblin)
+  '弓': '/sprites/enemy_archer.png',    // スケルトン (skeleton)
+  '花': '/sprites/enemy_flower.png',    // マスクオーク (masked_orc)
+  '狼': '/sprites/enemy_wolf.png',      // アイスゾンビ (ice_zombie)
+  '氷': '/sprites/enemy_ice.png',       // アイススケルトン (ice_skeleton)
+  '雪': '/sprites/enemy_yeti.png',      // ウィザード (wizzard)
+  '術': '/sprites/enemy_mage.png',      // エルフ (elf)
+  '竜': '/sprites/enemy_dragon.png',    // ビッグデーモン (big_demon)
+  '爆': '/sprites/enemy_bomber.png',    // オーク戦士 (orc_warrior)
+  '溶': '/sprites/enemy_lava.png',      // オークシャーマン (orc_shaman)
+  '召': '/sprites/enemy_summoner.png',  // ネクロマンサー (necromancer)
+  '闇': '/sprites/enemy_dark.png',      // ビッグゾンビ (big_zombie)
+  '死': '/sprites/enemy_reaper.png',    // タイニーゾンビ (tiny_zombie)
+  '魔': '/sprites/enemy_demon.png',     // チョート (chort)
 };
 
-// Item char -> tileset sprite position [x, y, w, h]
+// Item char -> tileset sprite key (for consumables/throws on ground)
+// Tileset items use key string, individual PNGs use path string with '/' prefix
 export const ITEM_SPRITES = {
-  '♥': 'flask_red',       // 回復薬
-  '✚': 'flask_big_red',   // 大回復薬
-  '力': 'flask_yellow',   // 力の種
-  '守': 'flask_blue',     // 守の種
-  '食': 'flask_big_green', // おにぎり
-  '飯': 'flask_big_yellow',// 大おにぎり
-  '薬': 'flask_green',    // 解毒草
-  '魔': 'flask_big_blue', // 魔力の水 (item context, not enemy 魔竜)
-  '●': 'bomb',            // 石
-  '†': 'skull',           // 毒針
-  '→': 'flask_blue',      // 氷の矢
+  '♥': '/sprites/item_potion_red.png',       // 回復薬 → red potion
+  '✚': '/sprites/item_potion_big_red.png',   // 大回復薬 → big red potion
+  '力': '/sprites/item_ring_gold.png',    // 力の指輪 → gold ring
+  '守': '/sprites/item_necklace.png',    // 守りの首飾り → necklace
+  '薬': '/sprites/item_herb.png',        // 薬草 → green herb
+  '魔': '/sprites/item_magic_water.png', // 魔力の水 → blue magic water
+  '●': '/sprites/item_stone.png',      // 石 → stone
+  '食': '/sprites/item_food_apple.png', // リンゴ → apple
+  '飯': '/sprites/item_food_meat.png',  // 焼き肉 → meat
+  '🔴': '/sprites/item_wand_red.png',   // 炎の矢 → red arrow
+  '🟣': '/sprites/item_staff_green.png', // 毒の杖 → green staff
+  '🔵': '/sprites/item_wand_blue.png',  // 氷の矢 → blue arrow
 };
 
-// Equipment sprites
+// Equipment name -> tileset sprite [x, y, w, h] (for items on ground & inventory)
 export const EQUIP_SPRITES = {
-  // Weapons - use tileset positions [x, y, w, h]
-  '木の剣': [323, 10, 10, 21],    // weapon_regular_sword
-  '鉄の剣': [307, 10, 10, 21],    // weapon_rusty_sword
-  '鋼の剣': [339, 10, 10, 21],    // weapon_red_gem_sword
-  '炎の剣': [322, 65, 12, 30],    // weapon_anime_sword
-  // Armor - use shield-like items
-  '皮の盾': [288, 352, 16, 16],   // flask_red as placeholder
-  '鉄の盾': [304, 352, 16, 16],
-  '鋼の盾': [320, 352, 16, 16],
-  '聖盾':   [336, 352, 16, 16],
+  // Weapons (individual PNGs from RPG Item Pack)
+  'ボロの剣': '/sprites/item_sword_wood.png',
+  '長剣':     '/sprites/item_sword_iron.png',
+  '宝剣':     '/sprites/item_sword_steel.png',
+  '聖剣':     '/sprites/item_sword_fire.png',
+  // Armor (individual PNGs from RPG Item Pack)
+  'ボロの盾': '/sprites/item_shield_wood.png',
+  '鉄の盾':   '/sprites/item_shield_iron.png',
+  '銅の盾':   '/sprites/item_shield_steel.png',
+  '聖盾':     '/sprites/item_shield_holy.png',
 };
 
 // Theme CSS filters for tileset color variation
@@ -106,6 +108,14 @@ export const THEME_FILTERS = [
   'hue-rotate(180deg) brightness(1.15)',           // 氷穴 (cyan)
   'hue-rotate(-20deg) saturate(1.5) brightness(0.9)', // 溶岩 (red)
   'brightness(0.5) saturate(0.4)',                 // 闇域 (dark)
+];
+// Inverse filters to cancel parent theme filter on overlays
+export const THEME_FILTERS_INV = [
+  'none',
+  'saturate(0.77) hue-rotate(-80deg)',
+  'brightness(0.87) hue-rotate(-180deg)',
+  'brightness(1.11) saturate(0.67) hue-rotate(20deg)',
+  'saturate(2.5) brightness(2)',
 ];
 
 // Tileset sheet dimensions

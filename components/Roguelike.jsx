@@ -2,13 +2,13 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { MAP_W, MAP_H, WALL, VP, VP_HALF, rand, MAX_FLOOR, MAX_INV, MAX_FULL, MAX_MP, DIRS_8, DIR_LABELS } from "./game/constants";
-import { getTheme, STATUS_INFO, SKILLS, SHOP_ITEMS } from "./game/data";
+import { getTheme, STATUS_INFO, SKILLS, SHOP_ITEMS, ENEMY_POOLS, CONSUMABLES, THROW_ITEMS, WEAPONS, ARMORS, THEMES, TRAP_TYPES } from "./game/data";
 import { initAudio, sfx } from "./game/audio";
 import { calcVis } from "./game/dungeon";
 import { initState, getAtk, getDef, addMsg, addStatus, tickStatuses, killCheck, levelUp, nextFloor, applyTrap, applyFull, applyPStatus, checkEvents, moveEnemies } from "./game/state";
 import { Bar } from "./ui/Bar";
 import { Overlay } from "./ui/Overlay";
-import { TILE_SPRITES, ENEMY_SPRITES, ITEM_SPRITES, THEME_FILTERS, SHEET_URL, SHEET_W, SHEET_H, PLAYER_SPRITE, MERCHANT_SPRITE, getFloorTileIdx } from "./game/sprites";
+import { TILE_SPRITES, ENEMY_SPRITES, ITEM_SPRITES, EQUIP_SPRITES, THEME_FILTERS, THEME_FILTERS_INV, SHEET_URL, SHEET_W, SHEET_H, PLAYER_SPRITE, MERCHANT_SPRITE, getFloorTileIdx } from "./game/sprites";
 
 export default function Roguelike(){
   const [g,setG]=useState(null);
@@ -23,6 +23,7 @@ export default function Roguelike(){
   const BTN_ACTIONS={inv:{icon:"📦",label:"持物",color:"#fbbf24"},skill:{icon:"🔥",label:"魔法",color:"#818cf8"},map:{icon:"🗺",label:"地図",color:"#60a5fa"},sound:{icon:"🔊",label:"音",color:"#4ade80"}};
   const [btnLayout,setBtnLayout]=useState(["map","sound","inv","skill"]);
   const [showConfig,setShowConfig]=useState(false);
+  const [libTab,setLibTab]=useState("enemy");
   const [configSlot,setConfigSlot]=useState(null);
   useEffect(()=>{(async()=>{try{const r=await window.storage.get("rl_btnLayout");if(r?.value)setBtnLayout(JSON.parse(r.value));}catch{}})();},[]);
   const saveBtnLayout=async(layout)=>{setBtnLayout(layout);try{await window.storage.set("rl_btnLayout",JSON.stringify(layout));}catch{};};
@@ -34,16 +35,20 @@ export default function Roguelike(){
   },[]);
   const prevTurn=useRef(0);
   useEffect(()=>{
-    if(g&&g.fx&&g.fx.length>0&&g.turns!==prevTurn.current){
+    if(g?.fx?.length>0){
       prevTurn.current=g.turns;spawnFx(g.fx);setG(p=>p?{...p,fx:[]}:p);}
-    else if(g&&g.fx&&g.fx.length>0){spawnFx(g.fx);setG(p=>p?{...p,fx:[]}:p);}
   },[g?.turns,g?.fx?.length]);
 
   useEffect(()=>{(async()=>{try{const r=await window.storage.get("rl_scores3");if(r?.value)setScores(JSON.parse(r.value));}catch{}})();},[]);
-  const saveScore=async st=>{const e={floor:st.floor,level:st.level,turns:st.turns,victory:st.victory,date:new Date().toLocaleDateString("ja-JP")};
+  const saveScoreFn=async st=>{const e={floor:st.floor,level:st.level,turns:st.turns,victory:st.victory,date:new Date().toLocaleDateString("ja-JP")};
     const ns=[...scores,e].sort((a,b)=>b.floor===a.floor?a.turns-b.turns:b.floor-a.floor).slice(0,10);setScores(ns);
     try{await window.storage.set("rl_scores3",JSON.stringify(ns));}catch{}};
+  const saveScoreRef=useRef(saveScoreFn);saveScoreRef.current=saveScoreFn;
+  const saveScore=useCallback((st)=>saveScoreRef.current(st),[]);
   const startGame=()=>{if(soundOn)initAudio();setG(initState());setScreen("game");setModal(null);setThrowMode(null);setSkillDir(null);};
+
+  // 1ターン消費して敵行動まで進める共通処理
+  const endTurn=(s)=>{s={...s,turns:s.turns+1};s=applyPStatus(s,saveScore);if(s.gameOver)return s;s=applyFull(s,saveScore);if(s.gameOver)return s;return moveEnemies(s,saveScore);};
 
   const useItem=idx=>{setG(prev=>{if(!prev||prev.gameOver)return prev;let s={...prev,inventory:[...prev.inventory],fx:[]};const item=s.inventory[idx];if(!item)return prev;
     if(item.category==="consumable"){s.inventory.splice(idx,1);
@@ -57,18 +62,18 @@ export default function Roguelike(){
     }else if(item.category==="equipment"){s.inventory.splice(idx,1);
       if(item.slot==="weapon"){if(s.weapon)s.inventory.push({...s.weapon,category:"equipment"});s.weapon=item;s.msgs=addMsg(s,`${item.name}装備！`);}
       else{if(s.armor)s.inventory.push({...s.armor,category:"equipment"});s.armor=item;s.msgs=addMsg(s,`${item.name}装備！`);}s.pendingSfx="equip";}
-    return s;});};
+    return endTurn(s);});};
 
   const dropItem=idx=>{setG(prev=>{if(!prev||prev.gameOver)return prev;
-    let s={...prev,inventory:[...prev.inventory],items:[...prev.items]};
+    let s={...prev,inventory:[...prev.inventory],items:[...prev.items],fx:[]};
     const item=s.inventory[idx];if(!item)return prev;
     s.inventory.splice(idx,1);
     s.items.push({...item,id:`drop_${Date.now()}_${Math.random()}`,x:s.px,y:s.py});
     s.msgs=addMsg(s,`${item.name}を足元に置いた`);
-    return s;});};
+    return endTurn(s);});};
 
   const unequip=slot=>{setG(prev=>{if(!prev||prev.gameOver)return prev;
-    let s={...prev,inventory:[...prev.inventory]};
+    let s={...prev,inventory:[...prev.inventory],fx:[]};
     if(slot==="weapon"&&s.weapon){
       if(s.inventory.length>=MAX_INV)return{...s,msgs:addMsg(s,"持ち物がいっぱいで外せない！")};
       s.inventory.push({...s.weapon,category:"equipment"});s.msgs=addMsg(s,`${s.weapon.name}を外した`);s.weapon=null;
@@ -76,7 +81,7 @@ export default function Roguelike(){
       if(s.inventory.length>=MAX_INV)return{...s,msgs:addMsg(s,"持ち物がいっぱいで外せない！")};
       s.inventory.push({...s.armor,category:"equipment"});s.msgs=addMsg(s,`${s.armor.name}を外した`);s.armor=null;
     }
-    return s;});};
+    return endTurn(s);});};
 
   const execThrow=(idx,di)=>{setG(prev=>{if(!prev||prev.gameOver)return prev;let s={...prev,inventory:[...prev.inventory],enemies:prev.enemies.map(e=>({...e}))};
     const item=s.inventory[idx];if(!item)return prev;s.inventory.splice(idx,1);
@@ -84,9 +89,9 @@ export default function Roguelike(){
     for(let i=0;i<10;i++){if(cx<0||cx>=MAP_W||cy<0||cy>=MAP_H||s.map[cy][cx]===WALL)break;hitE=s.enemies.find(e=>e.hp>0&&e.x===cx&&e.y===cy);if(hitE)break;cx+=ddx;cy+=ddy;}
     if(hitE){const target=s.enemies.find(e=>e.id===hitE.id),dmg=item.dmg||10;target.hp-=dmg;s.msgs=addMsg(s,`${item.name}→${target.name}！${dmg}dmg`);
       if(item.type==="throwPoison")target.statuses={...target.statuses,poison:(target.statuses.poison||0)+6};
-      if(item.type==="throwPara")target.statuses={...target.statuses,para:(target.statuses.para||0)+4};
+      if(item.type==="throwSlow")target.statuses={...target.statuses,slow:(target.statuses.slow||0)+4};
       if(target.hp<=0){s.exp+=target.exp;s.msgs=addMsg(s,`${target.name}撃破！+${target.exp}EXP`);let ls=s;while(ls.exp>=ls.expNext){ls.exp-=ls.expNext;ls=levelUp(ls);}s=ls;}
-      s.pendingSfx="throw";}else s.msgs=addMsg(s,`${item.name}は外れた`);return s;});setThrowMode(null);setModal(null);};
+      s.pendingSfx="throw";}else s.msgs=addMsg(s,`${item.name}は外れた`);return endTurn(s);});setThrowMode(null);setModal(null);};
 
   const execSkill=(sid,di)=>{setG(prev=>{if(!prev||prev.gameOver)return prev;const sk=SKILLS.find(s=>s.id===sid);if(!sk||prev.mp<sk.cost)return prev;
     let s={...prev,mp:prev.mp-sk.cost,enemies:prev.enemies.map(e=>({...e})),pendingSfx:"magic",fx:[]};
@@ -115,7 +120,7 @@ export default function Roguelike(){
         const d=Math.max(1,sk.dmg-e.def+rand(-2,2));e.hp-=d;h++;roomTiles.push({x:e.x,y:e.y,val:`-${d}`});if(e.hp<=0){s.exp+=e.exp;while(s.exp>=s.expNext){s.exp-=s.expNext;s=levelUp(s);}}}}}
       if(room)s.fx=[...(s.fx||[]),{type:"skillRoom",room,icon:sk.icon},...roomTiles.map(t=>({type:"dmg",...t,color:"#c084fc"}))];
       s.msgs=addMsg(s,`${sk.icon}${sk.name}！${h}体命中`);}
-    return s;});setSkillDir(null);setModal(null);};
+    return endTurn(s);});setSkillDir(null);setModal(null);};
 
   const buyItem=si=>{setG(prev=>{if(!prev||prev.gameOver)return prev;if(prev.gold<si.price)return{...prev,msgs:addMsg(prev,`お金が足りない(${prev.gold}G)`)};
     if(prev.inventory.length>=MAX_INV)return{...prev,msgs:addMsg(prev,"持ち物がいっぱい！")};
@@ -132,9 +137,10 @@ export default function Roguelike(){
     if(s.statuses.para&&Math.random()<0.4){s={...s,turns:s.turns+1};s.msgs=addMsg(s,"⚡ 痺れて動けない！");s=applyPStatus(s,saveScore);if(s.gameOver)return s;s=applyFull(s,saveScore);if(s.gameOver)return s;return moveEnemies(s,saveScore);}
     if(s.statuses.slow&&s.turns%2===0){s={...s,turns:s.turns+1};s=applyPStatus(s,saveScore);if(s.gameOver)return s;s=applyFull(s,saveScore);if(s.gameOver)return s;return moveEnemies(s,saveScore);}
     if(s.statuses.confuse&&Math.random()<0.5){const rd=DIRS_8[rand(0,7)];dx=rd[0];dy=rd[1];}
+    if(dx!==0)s.facing=dx>0?1:-1;
     const nx=s.px+dx,ny=s.py+dy;
     const diagBlock=dx!==0&&dy!==0&&(s.map[s.py][s.px+dx]===WALL||s.map[s.py+dy][s.px]===WALL);
-    if(nx<0||nx>=MAP_W||ny<0||ny>=MAP_H||s.map[ny][nx]===WALL||diagBlock) return prev;
+    if(nx<0||nx>=MAP_W||ny<0||ny>=MAP_H||s.map[ny][nx]===WALL||diagBlock) return dx!==0?{...prev,facing:dx>0?1:-1}:prev;
     s={...s,turns:s.turns+1};
     const enemy=s.enemies.find(e=>e.hp>0&&e.x===nx&&e.y===ny);
     if(enemy){s={...s,enemies:s.enemies.map(e=>({...e})),fx:[]};const target=s.enemies.find(e=>e.id===enemy.id);
@@ -145,8 +151,8 @@ export default function Roguelike(){
         s.fx.push({type:"kill",x:nx,y:ny,char:target.char,color:target.color});
         while(s.exp>=s.expNext){s.exp-=s.expNext;s=levelUp(s);}}
       s=applyPStatus(s,saveScore);if(s.gameOver)return s;s=applyFull(s,saveScore);if(s.gameOver)return s;return moveEnemies(s,saveScore);}
-    s.px=nx;s.py=ny;
-    if(s.merchant&&nx===s.merchant.x&&ny===s.merchant.y){s.px=prev.px;s.py=prev.py;s.msgs=addMsg(s,"🏪 商人！");s.pendingSfx="shop";setTimeout(()=>setModal("shop"),50);return s;}
+    s.px=nx;s.py=ny;s.lastMove={dx,dy,t:s.turns};
+    if(s.merchant&&nx===s.merchant.x&&ny===s.merchant.y){s.px=prev.px;s.py=prev.py;s.lastMove=null;s.msgs=addMsg(s,"🏪 商人！");s.pendingSfx="shop";setTimeout(()=>setModal("shop"),50);return s;}
     const item=s.items.find(it=>it.x===nx&&it.y===ny);
     if(item){if(s.inventory.length<MAX_INV){s={...s,items:s.items.filter(it=>it.id!==item.id),inventory:[...s.inventory,{...item}]};s.msgs=addMsg(s,`${item.name}を拾った`);s.pendingSfx="item";}
       else s.msgs=addMsg(s,"持ち物がいっぱい！ 📦から捨てて空きを作ろう");}
@@ -168,6 +174,23 @@ export default function Roguelike(){
     if(Math.abs(ddx)<25&&Math.abs(ddy)<25)return;
     const angle=Math.atan2(ddy,ddx),idx=Math.round(angle/(Math.PI/4)),map8=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]],di=((idx%8)+8)%8;
     processTurn(map8[di][0],map8[di][1]);touchRef.current=null;};
+
+  // Sprite icon for UI (inventory, shop, library, etc.) - fixed size
+  const itemIcon=(item,size=20)=>{
+    const ik=ITEM_SPRITES[item.char];
+    const eq=item.name?EQUIP_SPRITES[item.name]:null;
+    const pngPath=typeof ik==='string'&&ik.startsWith('/')?ik:typeof eq==='string'&&eq.startsWith('/')?eq:null;
+    if(pngPath){
+      return <div style={{display:'inline-block',width:size,height:size,verticalAlign:'middle',marginRight:6,backgroundImage:`url(${pngPath})`,backgroundSize:'contain',backgroundRepeat:'no-repeat',backgroundPosition:'center',imageRendering:'pixelated'}}/>;
+    }
+    const sprite=ik?TILE_SPRITES[ik]:Array.isArray(eq)?eq:null;
+    if(sprite){
+      const [sx,sy,sw,sh]=sprite;
+      const sc=size/Math.max(sw,sh);
+      return <div style={{display:'inline-block',width:size,height:size,verticalAlign:'middle',marginRight:6,backgroundImage:`url(${SHEET_URL})`,backgroundPosition:`-${sx*sc}px -${sy*sc}px`,backgroundSize:`${SHEET_W*sc}px ${SHEET_H*sc}px`,imageRendering:'pixelated'}}/>;
+    }
+    return <span style={{color:item.color,marginRight:6,fontSize:size*0.7}}>{item.char}</span>;
+  };
 
   // ===== TITLE =====
   if(screen==="title"){
@@ -194,13 +217,104 @@ export default function Roguelike(){
         <h1 style={{fontSize:28,fontWeight:800,color:"#fbbf24",margin:"0 0 6px",letterSpacing:"0.05em",animation:"title-glow 3s ease-in-out infinite"}}>不思議のダンジョン</h1>
         <p style={{fontSize:13,color:"#64748b",marginBottom:36,letterSpacing:"0.1em"}}>全{MAX_FLOOR}階を踏破せよ</p>
         <button onClick={startGame} style={{padding:"16px 56px",fontSize:17,fontWeight:700,background:"linear-gradient(135deg,#f59e0b,#d97706)",color:"#0f172a",border:"2px solid rgba(251,191,36,0.3)",borderRadius:14,cursor:"pointer",letterSpacing:"0.05em",marginBottom:16,animation:"title-btn 2s ease-in-out infinite",imageRendering:"pixelated"}}>冒険に出る</button>
-        <button onClick={()=>setModal("scores")} style={{padding:"10px 28px",fontSize:12,fontWeight:600,background:"transparent",color:"#64748b",border:"1px solid #334155",borderRadius:10,cursor:"pointer"}}>ランキング</button>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>setModal("scores")} style={{padding:"10px 28px",fontSize:12,fontWeight:600,background:"transparent",color:"#64748b",border:"1px solid #334155",borderRadius:10,cursor:"pointer"}}>ランキング</button>
+          <button onClick={()=>{setLibTab("enemy");setModal("library");}} style={{padding:"10px 28px",fontSize:12,fontWeight:600,background:"transparent",color:"#64748b",border:"1px solid #334155",borderRadius:10,cursor:"pointer"}}>ライブラリ</button>
+        </div>
         {modal==="scores"&&<Overlay onClose={()=>setModal(null)}>
           <h3 style={{color:"#fbbf24",margin:"0 0 16px",fontSize:16,fontWeight:700}}>ランキング</h3>
           {scores.length===0?<p style={{color:"#475569",fontSize:13}}>記録はまだありません</p>:
             scores.map((s,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)",fontSize:13,color:s.victory?"#fbbf24":"#94a3b8"}}>
               <span>#{i+1} {s.victory?"🏆":"💀"} B{s.floor}F Lv{s.level}</span><span style={{color:"#64748b"}}>{s.turns}T {s.date}</span></div>)}
           <button onClick={()=>setModal(null)} style={{marginTop:16,padding:"10px",fontSize:13,fontWeight:600,background:"rgba(255,255,255,0.06)",color:"#94a3b8",border:"none",borderRadius:10,cursor:"pointer",width:"100%"}}>閉じる</button>
+        </Overlay>}
+        {modal==="library"&&<Overlay onClose={()=>setModal(null)}>
+          <h3 style={{color:"#fbbf24",margin:"0 0 12px",fontSize:16,fontWeight:700}}>📖 ライブラリ</h3>
+          <div style={{display:"flex",gap:4,marginBottom:12}}>
+            {[["enemy","エネミー"],["item","アイテム"],["equip","装備"],["trap","トラップ"]].map(([k,l])=>(
+              <button key={k} onClick={()=>{setLibTab(k);const el=document.getElementById('lib-scroll');if(el)el.scrollTop=0;}} style={{flex:1,padding:"8px 0",fontSize:11,fontWeight:600,border:"none",borderRadius:8,cursor:"pointer",
+                background:libTab===k?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.04)",color:libTab===k?"#fbbf24":"#64748b"}}>{l}</button>
+            ))}
+          </div>
+          <div id="lib-scroll" style={{maxHeight:"55vh",overflowY:"auto"}}>
+            {libTab==="enemy"&&ENEMY_POOLS.map((pool,pi)=>(
+              <div key={pi}>
+                <div style={{fontSize:10,color:THEMES[pi]?.accent||"#94a3b8",fontWeight:700,padding:"8px 0 4px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>{THEMES[pi]?.name||`エリア${pi+1}`}（B{pi*2+1}-{pi*2+2}F）</div>
+                {pool.map((e,i)=>{const src=ENEMY_SPRITES[e.char];return(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                    <div style={{width:32,height:32,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.3)",borderRadius:6}}>
+                      {src?<img src={src} alt="" style={{width:28,height:34,imageRendering:"pixelated",objectFit:"contain"}}/>:
+                        <span style={{fontSize:18,color:e.color}}>{e.char}</span>}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:e.color}}>{e.name}</div>
+                      <div style={{fontSize:10,color:"#64748b"}}>HP{e.hp} 攻{e.atk} 守{e.def} EXP{e.exp}</div>
+                    </div>
+                  </div>);})}
+              </div>
+            ))}
+            {libTab==="item"&&<>
+              <div style={{fontSize:10,color:"#4ade80",fontWeight:700,padding:"4px 0",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>消費アイテム</div>
+              {CONSUMABLES.map((it,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                  <div style={{width:24,height:24,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {itemIcon(it,20)}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600,color:it.color}}>{it.name}</div>
+                    <div style={{fontSize:10,color:"#64748b"}}>{it.desc}{it.mf?` (${it.mf}F~)`:""}</div>
+                  </div>
+                </div>))}
+              <div style={{fontSize:10,color:"#f87171",fontWeight:700,padding:"8px 0 4px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>投擲アイテム</div>
+              {THROW_ITEMS.map((it,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                  <div style={{width:24,height:24,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {itemIcon(it,20)}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600,color:it.color}}>{it.name}</div>
+                    <div style={{fontSize:10,color:"#64748b"}}>{it.desc}{it.mf?` (${it.mf}F~)`:""}</div>
+                  </div>
+                </div>))}
+            </>}
+            {libTab==="equip"&&<>
+              <div style={{fontSize:10,color:"#f59e0b",fontWeight:700,padding:"4px 0",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>武器</div>
+              {WEAPONS.map((it,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                  <div style={{width:32,height:32,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,0.04)",borderRadius:4}}>
+                    {itemIcon(it,28)}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600,color:it.color}}>{it.name}</div>
+                    <div style={{fontSize:10,color:"#64748b"}}>攻撃+{it.atk}{it.mf?` (${it.mf}F~)`:""}</div>
+                  </div>
+                </div>))}
+              <div style={{fontSize:10,color:"#60a5fa",fontWeight:700,padding:"8px 0 4px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>防具</div>
+              {ARMORS.map((it,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                  <div style={{width:32,height:32,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,0.04)",borderRadius:4}}>
+                    {itemIcon(it,28)}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600,color:it.color}}>{it.name}</div>
+                    <div style={{fontSize:10,color:"#64748b"}}>防御+{it.def}{it.mf?` (${it.mf}F~)`:""}</div>
+                  </div>
+                </div>))}
+            </>}
+            {libTab==="trap"&&<>
+              {TRAP_TYPES.map((tr,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                  <div style={{width:24,height:24,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>
+                    {tr.icon}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600,color:tr.color}}>{tr.name}</div>
+                    <div style={{fontSize:10,color:"#64748b"}}>{tr.desc}</div>
+                  </div>
+                </div>))}
+            </>}
+          </div>
+          <button onClick={()=>setModal(null)} style={{marginTop:14,padding:"10px",fontSize:13,fontWeight:600,background:"rgba(255,255,255,0.06)",color:"#94a3b8",border:"none",borderRadius:10,cursor:"pointer",width:"100%"}}>閉じる</button>
         </Overlay>}
       </div>);
   }
@@ -249,6 +363,7 @@ export default function Roguelike(){
 
   const themeIdx=Math.min(Math.floor((g.floor-1)/2), THEME_FILTERS.length-1);
   const tileFilter=THEME_FILTERS[themeIdx];
+  const tileFilterInv=THEME_FILTERS_INV[themeIdx];
   const scale=ts/16;
 
   const tileSpriteBg=(sprite)=>{
@@ -260,6 +375,8 @@ export default function Roguelike(){
       imageRendering:'pixelated',
     };
   };
+
+
 
   const renderMap=()=>{const tiles=[];
     for(let vy=0;vy<VP;vy++)for(let vx=0;vx<VP;vx++){
@@ -274,17 +391,22 @@ export default function Roguelike(){
         isWall=g.map[my][mx]===WALL;
         if(!isV)op=0.25;
         if(isV){
-          if(mx===g.px&&my===g.py){entitySprite={src:PLAYER_SPRITE,isTall:true};}
+          if(mx===g.px&&my===g.py){entitySprite={src:PLAYER_SPRITE,isTall:true,facing:g.facing||1,isPlayer:true};}
           else if(g.merchant&&mx===g.merchant.x&&my===g.merchant.y){entitySprite={src:MERCHANT_SPRITE,isTall:true};}
           else{
             const en=g.enemies.find(e=>e.hp>0&&e.x===mx&&e.y===my);
-            if(en){const src=ENEMY_SPRITES[en.char];if(src)entitySprite={src,isTall:true};else entitySprite={char:en.char,color:en.color};}
+            if(en){const src=ENEMY_SPRITES[en.char];if(src)entitySprite={src,isTall:true,facing:en.facing||1};else entitySprite={char:en.char,color:en.color,facing:en.facing||1};}
             else if(mx===g.stairs.x&&my===g.stairs.y){itemSprite='stairs';}
             else{
               const tr=g.traps.find(t=>t.x===mx&&t.y===my&&t.visible);
-              if(tr){itemSprite='spikes';}
+              if(tr){itemSprite={trap:true,color:tr.color,icon:tr.icon};}
               else{const it=g.items.find(i2=>i2.x===mx&&i2.y===my);
-                if(it){const ik=ITEM_SPRITES[it.char];if(ik)itemSprite=ik;else entitySprite={char:it.char,color:it.color};}}}}
+                if(it){const ik=ITEM_SPRITES[it.char];const eq=it.name?EQUIP_SPRITES[it.name]:null;
+                  const resolved=ik||eq;
+                  if(typeof resolved==='string'&&resolved.startsWith('/'))itemSprite={png:resolved};
+                  else if(typeof resolved==='string')itemSprite=resolved;
+                  else if(Array.isArray(resolved))itemSprite={direct:resolved};
+                  else entitySprite={char:it.char,color:it.color};}}}}
         } else if(mx===g.stairs.x&&my===g.stairs.y&&isE){itemSprite='stairs';}
       }
 
@@ -292,22 +414,54 @@ export default function Roguelike(){
       const floorIdx=getFloorTileIdx(mx,my);
       const baseTile=(!inB||!(isV||isE))?null:isWall?TILE_SPRITES.wall_mid:TILE_SPRITES.floor[floorIdx];
 
+      // Floor edge detection
+      const isFloor=baseTile&&!isWall;
+      const wallAt=(wx,wy)=>wx<0||wx>=MAP_W||wy<0||wy>=MAP_H||g.map[wy][wx]===WALL;
+
       tiles.push(
         <div key={`${vx}-${vy}`} style={{
           width:ts,height:ts,position:'relative',overflow:'visible',opacity:op,boxSizing:'border-box',
           backgroundColor:baseTile?'transparent':'#000',
           ...(baseTile?{...tileSpriteBg(baseTile),filter:tileFilter}:{}),
         }}>
-          {/* Item sprite from tileset */}
-          {itemSprite&&TILE_SPRITES[itemSprite]&&(
-            <div style={{position:'absolute',top:0,left:0,width:ts,height:ts,zIndex:2,...tileSpriteBg(TILE_SPRITES[itemSprite])}}/>
+          {baseTile&&isWall&&<div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',background:'rgba(0,0,0,0.35)',zIndex:1}}/>}
+          {isFloor&&<div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',zIndex:1,pointerEvents:'none',filter:tileFilterInv,
+            borderTop:wallAt(mx,my-1)?'2px solid rgba(200,220,255,0.4)':'none',
+            borderBottom:wallAt(mx,my+1)?'2px solid rgba(200,220,255,0.4)':'none',
+            borderLeft:wallAt(mx-1,my)?'2px solid rgba(200,220,255,0.4)':'none',
+            borderRight:wallAt(mx+1,my)?'2px solid rgba(200,220,255,0.4)':'none',
+            boxSizing:'border-box'}}/>}
+          {/* Item sprite (tileset or individual PNG) */}
+          {itemSprite?.png&&(
+            <div style={{position:'absolute',top:0,left:0,width:ts,height:ts,zIndex:2,backgroundImage:`url(${itemSprite.png})`,backgroundSize:'contain',backgroundRepeat:'no-repeat',backgroundPosition:'center',imageRendering:'pixelated',filter:tileFilterInv}}/>
+          )}
+          {itemSprite&&!itemSprite.png&&(itemSprite.direct||TILE_SPRITES[itemSprite])&&(
+            <div style={{position:'absolute',top:0,left:0,width:ts,height:ts,zIndex:2,...tileSpriteBg(itemSprite.direct||TILE_SPRITES[itemSprite])}}/>
+          )}
+          {itemSprite?.trap&&(
+            <div style={{position:'absolute',top:0,left:0,width:ts,height:ts,zIndex:2,display:'flex',alignItems:'center',justifyContent:'center',filter:tileFilterInv}}>
+              <div style={{width:ts*0.5,height:ts*0.5,background:itemSprite.color,transform:'rotate(45deg)',border:'2px solid #000',boxShadow:`0 0 8px ${itemSprite.color}, 0 0 16px ${itemSprite.color}88`}}/>
+              <span style={{position:'absolute',fontSize:ts*0.4,lineHeight:1,filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.9))'}}>{itemSprite.icon}</span>
+            </div>
+          )}
+          {itemSprite==='stairs'&&(
+            <div style={{position:'absolute',top:0,left:0,width:ts,height:ts,zIndex:3,filter:tileFilterInv,pointerEvents:'none'}}>
+              <div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',borderRadius:'50%',background:'radial-gradient(circle,rgba(251,191,36,0.5) 0%,transparent 70%)',animation:'stairs-pulse 2s ease-in-out infinite'}}/>
+              <div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <span style={{fontSize:ts*0.4,color:'#fbbf24',textShadow:'0 1px 3px rgba(0,0,0,0.8)',animation:'stairs-arrow 1.5s ease-in-out infinite'}}>▼</span>
+              </div>
+            </div>
           )}
           {/* Entity sprite (individual PNG) */}
           {entitySprite?.src&&(
-            <img src={entitySprite.src} alt="" style={{
-              position:'absolute',bottom:0,left:'50%',transform:'translateX(-50%)',
+            <img key={entitySprite.isPlayer&&g.lastMove?`p${g.lastMove.t}`:undefined}
+              src={entitySprite.src} alt="" style={{
+              position:'absolute',bottom:0,left:'50%',
+              transform:`translateX(-50%) scaleX(${entitySprite.facing===-1?-1:1})`,
               width:ts,height:entitySprite.isTall?ts*1.5:ts,
               imageRendering:'pixelated',zIndex:3,pointerEvents:'none',
+              filter:tileFilterInv,
+              ...(entitySprite.isPlayer&&g.lastMove?{'--sx':`${-g.lastMove.dx*ts*0.28}px`,'--sy':`${-g.lastMove.dy*ts*0.28}px`,animation:'entity-slide 0.16s cubic-bezier(0.25,0.1,0.25,1)'}:{}),
             }}/>
           )}
           {/* Fallback text for unmapped entities */}
@@ -378,6 +532,9 @@ export default function Roguelike(){
           @keyframes fx-playerHit{0%{background:rgba(255,60,60,0.5)}100%{background:transparent}}
           @keyframes fx-skill{0%{opacity:0.8;transform:scale(0.5)}30%{opacity:0.6;transform:scale(1.05)}100%{opacity:0;transform:scale(1.2)}}
           @keyframes fx-heal{0%{opacity:0.7;box-shadow:0 0 8px #4ade80}100%{opacity:0;box-shadow:0 0 20px transparent}}
+          @keyframes stairs-pulse{0%,100%{opacity:0.25;transform:scale(0.9)}50%{opacity:0.6;transform:scale(1.05)}}
+          @keyframes stairs-arrow{0%,100%{transform:translateY(0);opacity:0.9}50%{transform:translateY(3px);opacity:0.5}}
+          @keyframes entity-slide{from{translate:var(--sx) var(--sy)}to{translate:0 0}}
         `}</style>
         <div style={{position:"relative",borderRadius:10,overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.4)"}}>
           <div style={{display:"grid",gridTemplateColumns:`repeat(${VP},${ts}px)`}}>{renderMap()}</div>
@@ -403,9 +560,13 @@ export default function Roguelike(){
                 const particles=Array.from({length:6},(_,i)=>({
                   angle:i*60+rand(-15,15), dist:rand(12,24)
                 }));
+                const killSrc=ENEMY_SPRITES[f.char];
                 return <div key={f.id}>
                   <div style={{position:"absolute",left:vx,top:vy,width:ts,height:ts,display:"flex",alignItems:"center",justifyContent:"center",
-                    fontSize:ts*0.5,color:f.color,animation:"fx-kill 500ms ease-out forwards",zIndex:5}}>{f.char}</div>
+                    animation:"fx-kill 500ms ease-out forwards",zIndex:5}}>
+                    {killSrc?<img src={killSrc} alt="" style={{width:ts,height:ts*1.2,imageRendering:'pixelated',objectFit:'contain'}}/>:
+                      <span style={{fontSize:ts*0.5,color:f.color}}>{f.char}</span>}
+                  </div>
                   {particles.map((p,i)=><div key={i} style={{position:"absolute",left:vx+ts/2-2,top:vy+ts/2-2,width:5,height:5,borderRadius:"50%",
                     background:f.color||"#fff",
                     "--px":`${Math.cos(p.angle*Math.PI/180)*p.dist}px`,"--py":`${Math.sin(p.angle*Math.PI/180)*p.dist}px`,
@@ -563,10 +724,11 @@ export default function Roguelike(){
               <div style={{fontSize:10,color:"#fbbf24",fontWeight:600,marginBottom:6}}>足元のアイテム</div>
               {footItems.map((fi,i)=>(
                 <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0"}}>
-                  <span style={{fontSize:12}}><span style={{color:fi.color,marginRight:4}}>{fi.char}</span>{fi.name}</span>
+                  <span style={{fontSize:12}}>{itemIcon(fi,16)}{fi.name}</span>
                   {g.inventory.length<MAX_INV&&<button onClick={()=>{setG(prev=>{
-                    let s={...prev,items:prev.items.filter(it=>it.id!==fi.id),inventory:[...prev.inventory,{...fi}]};
-                    s.msgs=addMsg(s,`${fi.name}を拾った`);s.pendingSfx="item";return s;});}}
+                    if(!prev||prev.gameOver)return prev;
+                    let s={...prev,items:prev.items.filter(it=>it.id!==fi.id),inventory:[...prev.inventory,{...fi}],fx:[]};
+                    s.msgs=addMsg(s,`${fi.name}を拾った`);s.pendingSfx="item";return endTurn(s);});}}
                     style={{padding:"4px 10px",fontSize:10,fontWeight:600,border:"none",borderRadius:6,cursor:"pointer",background:"#16a34a",color:"#fff"}}>拾う</button>}
                 </div>))}
             </div>);})()}
@@ -574,7 +736,7 @@ export default function Roguelike(){
           g.inventory.map((item,i)=>(
             <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
               <div style={{flex:1,minWidth:0}}>
-                <span style={{color:item.color,marginRight:6,fontSize:14}}>{item.char}</span>
+                {itemIcon(item,20)}
                 <span style={{fontSize:13,fontWeight:500}}>{item.name}</span>
                 <div style={{fontSize:10,color:"#64748b",marginTop:1}}>{item.category==="consumable"?item.desc:item.category==="throw"?item.desc:item.slot==="weapon"?`攻撃+${item.atk}`:`防御+${item.def}`}</div>
               </div>
@@ -632,7 +794,7 @@ export default function Roguelike(){
         <h3 style={{color:"#fbbf24",margin:"0 0 12px",fontSize:16,fontWeight:700}}>🏪 商人 <span style={{fontSize:12,fontWeight:400,color:"#64748b"}}>{g.gold}G</span></h3>
         {SHOP_ITEMS.map((si,i)=>(
           <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.04)",opacity:g.gold>=si.price?1:0.35}}>
-            <div><span style={{color:si.color,marginRight:6,fontSize:14}}>{si.char}</span><span style={{fontSize:13}}>{si.name}</span>
+            <div>{itemIcon(si,18)}<span style={{fontSize:13}}>{si.name}</span>
               <div style={{fontSize:10,color:"#64748b",marginTop:1}}>{si.desc}</div></div>
             <button onClick={()=>buyItem(si)} disabled={g.gold<si.price} style={{padding:"6px 14px",fontSize:11,fontWeight:600,border:"none",borderRadius:8,cursor:"pointer",
               background:g.gold>=si.price?"#d97706":"#1e293b",color:g.gold>=si.price?"#0f172a":"#475569"}}>{si.price}G</button>
