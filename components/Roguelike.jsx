@@ -13,6 +13,8 @@ import { TILE_SPRITES, ENEMY_SPRITES, ITEM_SPRITES, EQUIP_SPRITES, THEME_FILTERS
 export default function Roguelike(){
   const [g,setG]=useState(null);
   const [screen,setScreen]=useState("splash");
+  const [isMobile,setIsMobile]=useState(false);
+  useEffect(()=>{const ch=()=>setIsMobile(window.innerWidth<640);ch();window.addEventListener("resize",ch);return()=>window.removeEventListener("resize",ch);},[]);
   const [modal,setModal]=useState(null);
   const [throwMode,setThrowMode]=useState(null);
   const [skillDir,setSkillDir]=useState(null);
@@ -235,7 +237,7 @@ export default function Roguelike(){
         {/* Sparkle particles */}
         {[...Array(24)].map((_,i)=>{const colors=["#fbbf24","#f59e0b","#fcd34d","#fff7ed","#67e8f9","#a78bfa"];
           return <div key={`sp${i}`} style={{position:"absolute",
-            left:`${30+((i*17+3)%40)}%`,top:`${10+((i*31+7)%80)}%`,
+            left:isMobile?`${5+((i*17+3)%90)}%`:`${20+((i*17+3)%60)}%`,top:`${10+((i*31+7)%80)}%`,
             width:i%3===0?6:4,height:i%3===0?6:4,
             animation:`sparkle ${2.5+i*0.4}s ease-in-out ${i*0.3}s infinite, sparkle-drift ${4+i*0.5}s ease-in-out ${i*0.2}s infinite alternate`,
           }}>
@@ -248,7 +250,7 @@ export default function Roguelike(){
         {[...Array(8)].map((_,i)=>{const angles=[25,35,20,40,30,22,38,28];const dists=[90,130,110,100,120,85,140,95];
           const dx=Math.round(Math.cos(angles[i]*Math.PI/180)*dists[i]);
           const dy=Math.round(Math.sin(angles[i]*Math.PI/180)*dists[i]);
-          const lefts=[42,50,44,52,40,48,51,45];const tops=[8,25,50,15,65,40,5,55];
+          const lefts=isMobile?[15,75,25,65,10,80,35,55]:[42,50,44,52,40,48,51,45];const tops=[8,25,50,15,65,40,5,55];
           const col=["#fbbf24","#67e8f9","#fcd34d","#a78bfa","#f59e0b","#fff7ed","#67e8f9","#fcd34d"][i];
           const sz=3+i%2;
           return <div key={`ss${i}`} style={{position:"absolute",
