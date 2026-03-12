@@ -1,4 +1,4 @@
-import { MAP_W, MAP_H, WALL, FLOOR, rand, DIRS_4, DIRS_8 } from './constants';
+import { MAP_W, MAP_H, WALL, FLOOR, rand, DIRS_4, DIRS_8, toKey } from './constants';
 import { ENEMY_POOLS, CONSUMABLES, THROW_ITEMS, WEAPONS, ARMORS, TRAP_TYPES } from './data';
 
 // LOS for ranged enemies
@@ -22,7 +22,7 @@ export function findRoom(px,py,rooms){
 function corridorVis(vis,px,py,map){
   for(const[dx,dy] of DIRS_8){
     const nx=px+dx,ny=py+dy;
-    if(nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H) vis.add(`${nx},${ny}`);
+    if(nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H) vis.add(toKey(nx,ny));
   }
 }
 
@@ -30,7 +30,7 @@ function corridorVis(vis,px,py,map){
 function roomVis(vis,room){
   for(let ry=room.y-1;ry<=room.y+room.h;ry++){
     for(let rx=room.x-1;rx<=room.x+room.w;rx++){
-      if(rx>=0&&rx<MAP_W&&ry>=0&&ry<MAP_H) vis.add(`${rx},${ry}`);
+      if(rx>=0&&rx<MAP_W&&ry>=0&&ry<MAP_H) vis.add(toKey(rx,ry));
     }
   }
 }
@@ -38,7 +38,7 @@ function roomVis(vis,room){
 // Main visibility function
 export function calcVis(px,py,map,rooms,radius=5){
   const vis=new Set();
-  vis.add(`${px},${py}`);
+  vis.add(toKey(px,py));
   const isBlind=radius<5;
   const room=findRoom(px,py,rooms);
   if(room&&!isBlind){
@@ -53,7 +53,7 @@ export function calcVis(px,py,map,rooms,radius=5){
             for(let d=0;d<=2;d++){
               const nx=rx+dx*d,ny=ry+dy*d;
               if(nx<0||nx>=MAP_W||ny<0||ny>=MAP_H) break;
-              vis.add(`${nx},${ny}`);
+              vis.add(toKey(nx,ny));
               if(map[ny][nx]===WALL) break;
             }
           }

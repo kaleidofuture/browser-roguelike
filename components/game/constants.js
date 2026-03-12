@@ -5,3 +5,5 @@ export const MAX_FLOOR = 10, MAX_INV = 12, MAX_FULL = 150, FULL_DECAY = 1, MAX_M
 export const DIRS_4 = [[0,-1],[0,1],[-1,0],[1,0]];
 export const DIRS_8 = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
 export const DIR_LABELS = ["↑","↗","→","↘","↓","↙","←","↖"];
+export const toKey = (x, y) => y * MAP_W + x;
+export const fromKey = (k) => [k % MAP_W, Math.floor(k / MAP_W)];

@@ -1,4 +1,4 @@
-import { MAP_W, MAP_H, WALL, FLOOR, rand, MAX_FLOOR, MAX_FULL, FULL_DECAY, MAX_MP, DIRS_8 } from './constants';
+import { MAP_W, MAP_H, WALL, FLOOR, rand, MAX_FLOOR, MAX_FULL, FULL_DECAY, MAX_MP, DIRS_8, toKey } from './constants';
 import { STATUS_INFO, ENEMY_POOLS } from './data';
 import { getTheme } from './data';
 import { genDungeon, calcVis } from './dungeon';
@@ -41,7 +41,7 @@ export function applyTrap(s,saveScore){const trap=s.traps.find(t=>t.x===s.px&&t.
       do{wr=ns.rooms[rand(0,ns.rooms.length-1)];wx=rand(wr.x,wr.x+wr.w-1);wy=rand(wr.y,wr.y+wr.h-1);tries++;}
       while(tries<50&&(ns.map[wy][wx]===WALL||ns.enemies.some(e=>e.hp>0&&e.x===wx&&e.y===wy)||(ns.merchant&&wx===ns.merchant.x&&wy===ns.merchant.y)));
       ns.px=wx;ns.py=wy;ns.msgs=addMsg(ns,"🌀 ワープ！");
-      const wv=calcVis(ns.px,ns.py,ns.map,ns.rooms,ns.statuses.blind?2:5);ns.visible=wv;const we=new Set(ns.explored);wv.forEach(v=>we.add(v));ns.explored=we;break;}
+      const wv=calcVis(ns.px,ns.py,ns.map,ns.rooms,ns.statuses.blind?2:5);ns.visible=wv;const we=new Set(ns.explored);for(const v of wv)we.add(v);ns.explored=we;break;}
     case"bomb":{const d=rand(15,20+ns.floor*3);ns.hp-=d;ns.msgs=addMsg(ns,`💥 地雷！${d}dmg`);break;}
     case"slow":ns=addStatus(ns,"slow",5);ns.msgs=addMsg(ns,"🐢 鈍足！");break;
     case"confuse":ns=addStatus(ns,"confuse",6);ns.msgs=addMsg(ns,"💫 混乱！");break;
@@ -127,18 +127,19 @@ export function moveEnemies(s,saveScore){let ns={...s,enemies:s.enemies.map(e=>(
     if(e.aware){
       const BFS_DIRS=[[0,-1],[0,1],[-1,0],[1,0],[1,-1],[1,1],[-1,1],[-1,-1]];
       const path=(()=>{
-        const Q=[{x:e.x,y:e.y,steps:[]}],visited=new Set([`${e.x},${e.y}`]);
-        while(Q.length>0){
-          const{x:cx,y:cy,steps}=Q.shift();
-          if(steps.length>=20)continue;
+        const Q=[{x:e.x,y:e.y,steps:null,depth:0}],visited=new Set([toKey(e.x,e.y)]);
+        let qi=0;
+        while(qi<Q.length){
+          const{x:cx,y:cy,steps,depth}=Q[qi++];
+          if(depth>=15)continue;
           for(const[ddx,ddy] of BFS_DIRS){
-            const nx2=cx+ddx,ny2=cy+ddy,k2=`${nx2},${ny2}`;
+            const nx2=cx+ddx,ny2=cy+ddy,k2=toKey(nx2,ny2);
             if(nx2<0||nx2>=MAP_W||ny2<0||ny2>=MAP_H||visited.has(k2)||ns.map[ny2][nx2]===WALL)continue;
             if(ddx!==0&&ddy!==0&&(ns.map[cy][cx+ddx]===WALL||ns.map[cy+ddy][cx]===WALL))continue;
-            if(nx2===ns.px&&ny2===ns.py){if(steps.length>0)return steps[0];continue;}
+            if(nx2===ns.px&&ny2===ns.py){if(steps)return steps;continue;}
             visited.add(k2);
             if(!ns.enemies.some(o=>o.id!==e.id&&o.hp>0&&o.x===nx2&&o.y===ny2)&&!isMrc(nx2,ny2))
-              Q.push({x:nx2,y:ny2,steps:steps.length===0?[{x:nx2,y:ny2}]:steps});
+              Q.push({x:nx2,y:ny2,steps:steps||{x:nx2,y:ny2},depth:depth+1});
           }
         }return null;
       })();
@@ -163,7 +164,7 @@ export function moveEnemies(s,saveScore){let ns={...s,enemies:s.enemies.map(e=>(
     for(let tries=0;tries<10&&candidates.length>0;tries++){
       const r=candidates[rand(0,candidates.length-1)];
       const sx=rand(r.x,r.x+r.w-1),sy=rand(r.y,r.y+r.h-1);
-      const sk=`${sx},${sy}`;
+      const sk=toKey(sx,sy);
       const isMrcSp=ns.merchant&&sx===ns.merchant.x&&sy===ns.merchant.y;
       if(ns.map[sy][sx]===FLOOR&&!ns.visible.has(sk)&&!ns.enemies.some(e2=>e2.hp>0&&e2.x===sx&&e2.y===sy)&&!isMrcSp){
         const t=pool[rand(0,pool.length-1)];
