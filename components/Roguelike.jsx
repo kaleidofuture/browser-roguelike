@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { MAP_W, MAP_H, WALL, VP, VP_HALF, rand, MAX_FLOOR, MAX_INV, MAX_FULL, MAX_MP, DIRS_8, DIR_LABELS } from "./game/constants";
+import { MAP_W, MAP_H, WALL, VP, VP_HALF, rand, MAX_FLOOR, MAX_INV, MAX_FULL, MAX_MP, DIRS_8, DIR_LABELS, toKey } from "./game/constants";
 import { getTheme, STATUS_INFO, SKILLS, SHOP_ITEMS, ENEMY_POOLS, CONSUMABLES, THROW_ITEMS, WEAPONS, ARMORS, THEMES, TRAP_TYPES } from "./game/data";
 import { initAudio, sfx, playBgm, stopBgm, playFloorBgm } from "./game/audio";
 import { calcVis } from "./game/dungeon";
@@ -28,8 +28,8 @@ export default function Roguelike(){
   const [libTab,setLibTab]=useState("enemy");
   const [previewBgm,setPreviewBgm]=useState(null);
   const [configSlot,setConfigSlot]=useState(null);
-  useEffect(()=>{(async()=>{try{const r=await window.storage.get("rl_btnLayout");if(r?.value)setBtnLayout(JSON.parse(r.value));}catch{}})();},[]);
-  const saveBtnLayout=async(layout)=>{setBtnLayout(layout);try{await window.storage.set("rl_btnLayout",JSON.stringify(layout));}catch{};};
+  useEffect(()=>{try{const r=localStorage.getItem("rl_btnLayout");if(r)setBtnLayout(JSON.parse(r));}catch{}},[]);
+  const saveBtnLayout=(layout)=>{setBtnLayout(layout);try{localStorage.setItem("rl_btnLayout",JSON.stringify(layout));}catch{}};
   const fxId=useRef(0);
   const spawnFx=useCallback((arr)=>{
     const nfx=arr.map(f=>({...f,id:fxId.current++,ts:Date.now()}));
@@ -42,10 +42,10 @@ export default function Roguelike(){
       prevTurn.current=g.turns;spawnFx(g.fx);setG(p=>p?{...p,fx:[]}:p);}
   },[g?.turns,g?.fx?.length]);
 
-  useEffect(()=>{(async()=>{try{const r=await window.storage.get("rl_scores3");if(r?.value)setScores(JSON.parse(r.value));}catch{}})();},[]);
-  const saveScoreFn=async st=>{const e={floor:st.floor,level:st.level,turns:st.turns,victory:st.victory,date:new Date().toLocaleDateString("ja-JP")};
+  useEffect(()=>{try{const r=localStorage.getItem("rl_scores3");if(r)setScores(JSON.parse(r));}catch{}},[]);
+  const saveScoreFn=st=>{const e={floor:st.floor,level:st.level,turns:st.turns,victory:st.victory,date:new Date().toLocaleDateString("ja-JP")};
     const ns=[...scores,e].sort((a,b)=>b.floor===a.floor?a.turns-b.turns:b.floor-a.floor).slice(0,10);setScores(ns);
-    try{await window.storage.set("rl_scores3",JSON.stringify(ns));}catch{}};
+    try{localStorage.setItem("rl_scores3",JSON.stringify(ns));}catch{}};
   const saveScoreRef=useRef(saveScoreFn);saveScoreRef.current=saveScoreFn;
   const saveScore=useCallback((st)=>saveScoreRef.current(st),[]);
   const startGame=()=>{if(soundOn)initAudio();setG(initState());setScreen("game");setModal(null);setThrowMode(null);setSkillDir(null);if(soundOn)playFloorBgm(1);};
@@ -105,7 +105,7 @@ export default function Roguelike(){
       do{wr=s.rooms[rand(0,s.rooms.length-1)];wx=rand(wr.x,wr.x+wr.w-1);wy=rand(wr.y,wr.y+wr.h-1);tries++;}
       while(tries<50&&(s.map[wy][wx]===WALL||s.enemies.some(e=>e.hp>0&&e.x===wx&&e.y===wy)||(s.merchant&&wx===s.merchant.x&&wy===s.merchant.y)));
       s.px=wx;s.py=wy;s.msgs=addMsg(s,`${sk.icon}転移！`);
-      const wv=calcVis(s.px,s.py,s.map,s.rooms,s.statuses.blind?2:5);s.visible=wv;const we=new Set(s.explored);wv.forEach(v=>we.add(v));s.explored=we;}
+      const wv=calcVis(s.px,s.py,s.map,s.rooms,s.statuses.blind?2:5);s.visible=wv;const we=new Set(s.explored);for(const v of wv)we.add(v);s.explored=we;}
     else if(sk.type==="area"){let h=0;const hitTiles=[];for(const e of s.enemies){if(e.hp<=0)continue;if(Math.abs(e.x-s.px)<=sk.radius&&Math.abs(e.y-s.py)<=sk.radius){
       const d=Math.max(1,sk.dmg-e.def+rand(-2,2));e.hp-=d;h++;hitTiles.push({x:e.x,y:e.y,val:`-${d}`});if(e.hp<=0){s.exp+=e.exp;while(s.exp>=s.expNext){s.exp-=s.expNext;s=levelUp(s);}}}}
       s.fx=[...(s.fx||[]),{type:"skillArea",x:s.px,y:s.py,r:sk.radius,icon:sk.icon},...hitTiles.map(t=>({type:"dmg",...t,color:"#fbbf24"}))];
@@ -161,7 +161,7 @@ export default function Roguelike(){
       else s.msgs=addMsg(s,"持ち物がいっぱい！ 📦から捨てて空きを作ろう");}
     s=applyTrap(s,saveScore);if(s.gameOver)return s;s=checkEvents(s);
     if(s.px===s.stairs.x&&s.py===s.stairs.y)return nextFloor(s,saveScore);
-    const vis=calcVis(s.px,s.py,s.map,s.rooms,s.statuses.blind?2:5);s.visible=vis;const ne=new Set(s.explored);vis.forEach(v=>ne.add(v));s.explored=ne;
+    const vis=calcVis(s.px,s.py,s.map,s.rooms,s.statuses.blind?2:5);s.visible=vis;const ne=new Set(s.explored);for(const v of vis)ne.add(v);s.explored=ne;
     if(s.turns%5===0&&s.mp<s.maxMp)s.mp=Math.min(s.maxMp,s.mp+1);
     s=applyPStatus(s,saveScore);if(s.gameOver)return s;s=applyFull(s,saveScore);if(s.gameOver)return s;return moveEnemies(s,saveScore);});},[]);
 
@@ -236,7 +236,7 @@ export default function Roguelike(){
         `}</style>
         {/* Sparkle particles */}
         {[...Array(24)].map((_,i)=>{const colors=["#fbbf24","#f59e0b","#fcd34d","#fff7ed","#67e8f9","#a78bfa"];
-          return <div key={`sp${i}`} style={{position:"absolute",
+          return <div key={`sp${i}`} style={{position:"absolute",zIndex:0,pointerEvents:"none",
             left:isMobile?`${5+((i*17+3)%90)}%`:`${20+((i*17+3)%60)}%`,top:`${10+((i*31+7)%80)}%`,
             width:i%3===0?6:4,height:i%3===0?6:4,
             animation:`sparkle ${2.5+i*0.4}s ease-in-out ${i*0.3}s infinite, sparkle-drift ${4+i*0.5}s ease-in-out ${i*0.2}s infinite alternate`,
@@ -253,7 +253,7 @@ export default function Roguelike(){
           const lefts=isMobile?[15,75,25,65,10,80,35,55]:[42,50,44,52,40,48,51,45];const tops=[8,25,50,15,65,40,5,55];
           const col=["#fbbf24","#67e8f9","#fcd34d","#a78bfa","#f59e0b","#fff7ed","#67e8f9","#fcd34d"][i];
           const sz=3+i%2;
-          return <div key={`ss${i}`} style={{position:"absolute",
+          return <div key={`ss${i}`} style={{position:"absolute",zIndex:0,pointerEvents:"none",
           left:`${lefts[i]}%`,top:`${tops[i]}%`,
           width:sz,height:sz,borderRadius:"50%",
           background:col,boxShadow:`0 0 4px ${col}, 0 0 8px ${col}`,
@@ -262,17 +262,17 @@ export default function Roguelike(){
           animation:`shooting-star ${1.2+i*0.15}s ease-in ${0.3+i*1.1}s infinite`,
         }}/>;})}
         {/* Floor tiles decoration */}
-        <div style={{position:"absolute",bottom:0,left:0,right:0,height:80,display:"flex",justifyContent:"center",gap:0,opacity:0.9}}>
+        <div style={{position:"absolute",bottom:0,left:0,right:0,height:80,display:"flex",justifyContent:"center",gap:0,opacity:0.9,zIndex:0,pointerEvents:"none"}}>
           {[...Array(12)].map((_,i)=><div key={i} style={{width:32,height:32,backgroundImage:`url(${SHEET_URL})`,backgroundPosition:`-${16*2}px -${64}px`,backgroundSize:`${SHEET_W*2}px ${SHEET_H*2}px`,imageRendering:"pixelated"}}/>)}
         </div>
         {/* Hero sprite */}
-        <div style={{marginBottom:12,animation:"title-float 3s ease-in-out infinite",filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.6))"}}>
+        <div style={{position:"relative",zIndex:1,marginBottom:12,animation:"title-float 3s ease-in-out infinite",filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.6))"}}>
           <img src={PLAYER_SPRITE} alt="" style={{width:80,height:120,imageRendering:"pixelated"}}/>
         </div>
-        <h1 style={{fontSize:28,fontWeight:800,color:"#fbbf24",margin:"0 0 6px",letterSpacing:"0.05em",animation:"title-glow 3s ease-in-out infinite"}}>不思議のダンジョン</h1>
-        <p style={{fontSize:13,color:"#64748b",marginBottom:36,letterSpacing:"0.1em"}}>全{MAX_FLOOR}階を踏破せよ</p>
-        <button onClick={startGame} style={{padding:"16px 56px",fontSize:17,fontWeight:700,background:"linear-gradient(135deg,#f59e0b,#d97706)",color:"#0f172a",border:"2px solid rgba(251,191,36,0.3)",borderRadius:14,cursor:"pointer",letterSpacing:"0.05em",marginBottom:16,animation:"title-btn 2s ease-in-out infinite",imageRendering:"pixelated"}}>冒険に出る</button>
-        <div style={{display:"flex",gap:10}}>
+        <h1 style={{position:"relative",zIndex:1,fontSize:28,fontWeight:800,color:"#fbbf24",margin:"0 0 6px",letterSpacing:"0.05em",animation:"title-glow 3s ease-in-out infinite"}}>不思議のダンジョン</h1>
+        <p style={{position:"relative",zIndex:1,fontSize:13,color:"#64748b",marginBottom:36,letterSpacing:"0.1em"}}>全{MAX_FLOOR}階を踏破せよ</p>
+        <button onClick={startGame} style={{position:"relative",zIndex:1,padding:"16px 56px",fontSize:17,fontWeight:700,background:"linear-gradient(135deg,#f59e0b,#d97706)",color:"#0f172a",border:"2px solid rgba(251,191,36,0.3)",borderRadius:14,cursor:"pointer",letterSpacing:"0.05em",marginBottom:16,animation:"title-btn 2s ease-in-out infinite",imageRendering:"pixelated"}}>冒険に出る</button>
+        <div style={{position:"relative",zIndex:1,display:"flex",gap:10}}>
           <button onClick={()=>setModal("scores")} style={{padding:"10px 28px",fontSize:12,fontWeight:600,background:"transparent",color:"#64748b",border:"1px solid #334155",borderRadius:10,cursor:"pointer"}}>ランキング</button>
           <button onClick={()=>{setLibTab("enemy");setModal("library");}} style={{padding:"10px 28px",fontSize:12,fontWeight:600,background:"transparent",color:"#64748b",border:"1px solid #334155",borderRadius:10,cursor:"pointer"}}>ライブラリ</button>
         </div>
@@ -429,7 +429,7 @@ export default function Roguelike(){
 
   // ===== GAME SCREEN =====
   const theme=getTheme(g.floor);
-  const nearE=g.enemies.filter(e=>e.hp>0&&g.visible.has(`${e.x},${e.y}`));
+  const nearE=g.enemies.filter(e=>e.hp>0&&g.visible.has(toKey(e.x,e.y)));
   const recentM=g.msgs.slice(-3);
   const statusIcons=Object.keys(g.statuses).map(k=>STATUS_INFO[k]?.icon||"").join(" ");
   const avSkills=SKILLS.filter(sk=>!sk.mf||g.floor>=sk.mf);
@@ -457,8 +457,8 @@ export default function Roguelike(){
 
   const renderMap=()=>{const tiles=[];
     for(let vy=0;vy<VP;vy++)for(let vx=0;vx<VP;vx++){
-      const mx=g.px-VP_HALF+vx,my=g.py-VP_HALF+vy,key=`${mx},${my}`,inB=mx>=0&&mx<MAP_W&&my>=0&&my<MAP_H;
-      const isV=g.visible.has(key),isE=g.explored.has(key);
+      const mx=g.px-VP_HALF+vx,my=g.py-VP_HALF+vy,key=toKey(mx,my),inB=mx>=0&&mx<MAP_W&&my>=0&&my<MAP_H;
+      const isV=inB&&g.visible.has(key),isE=inB&&g.explored.has(key);
       let op=1;
       let entitySprite=null; // {src, isTall}
       let itemSprite=null; // tileset sprite key
@@ -884,13 +884,13 @@ export default function Roguelike(){
         <h3 style={{color:"#60a5fa",margin:"0 0 12px",fontSize:16,fontWeight:700,textAlign:"center"}}>🗺 B{g.floor}F {theme.name}</h3>
         <div style={{display:"grid",gridTemplateColumns:`repeat(${MAP_W},7px)`,gap:0,justifyContent:"center",borderRadius:8,overflow:"hidden"}}>
           {Array.from({length:MAP_H},(_,my)=>Array.from({length:MAP_W},(_2,mx)=>{
-            const k=`${mx},${my}`,isE=g.explored.has(k);let c="#08080c";
+            const k=toKey(mx,my),isE=g.explored.has(k);let c="#08080c";
             if(isE){c=g.map[my][mx]===WALL?theme.wall:theme.floor;
               if(mx===g.px&&my===g.py)c="#38bdf8";
               else if(mx===g.stairs.x&&my===g.stairs.y)c="#a78bfa";
               else if(g.merchant&&mx===g.merchant.x&&my===g.merchant.y)c="#fbbf24";
               else{const he=g.enemies.find(e=>e.hp>0&&e.x===mx&&e.y===my&&g.visible.has(k));if(he)c="#ef4444";}}
-            return <div key={k} style={{width:7,height:7,backgroundColor:c}}/>;}))}
+            return <div key={`${mx}-${my}`} style={{width:7,height:7,backgroundColor:c}}/>;}))}
         </div>
         <div style={{display:"flex",gap:12,marginTop:10,fontSize:10,color:"#64748b",justifyContent:"center"}}>
           <span><span style={{color:"#38bdf8"}}>■</span> 自分</span><span><span style={{color:"#a78bfa"}}>■</span> 階段</span>
