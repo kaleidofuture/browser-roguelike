@@ -499,10 +499,10 @@ export default function Roguelike(){
         <div key={`${vx}-${vy}`} style={{
           width:ts,height:ts,position:'relative',overflow:'visible',opacity:op,boxSizing:'border-box',
           backgroundColor:baseTile?'transparent':'#000',
-          ...(baseTile?{...tileSpriteBg(baseTile),filter:tileFilter}:{}),
+          ...(baseTile?tileSpriteBg(baseTile):{}),
         }}>
           {baseTile&&isWall&&<div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',background:'rgba(0,0,0,0.35)',zIndex:1}}/>}
-          {isFloor&&<div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',zIndex:1,pointerEvents:'none',filter:tileFilterInv,
+          {isFloor&&<div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',zIndex:1,pointerEvents:'none',
             borderTop:wallAt(mx,my-1)?'2px solid rgba(200,220,255,0.4)':'none',
             borderBottom:wallAt(mx,my+1)?'2px solid rgba(200,220,255,0.4)':'none',
             borderLeft:wallAt(mx-1,my)?'2px solid rgba(200,220,255,0.4)':'none',
@@ -614,7 +614,7 @@ export default function Roguelike(){
           @keyframes entity-slide{from{translate:var(--sx) var(--sy)}to{translate:0 0}}
         `}</style>
         <div style={{position:"relative",borderRadius:10,overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.4)"}}>
-          <div style={{display:"grid",gridTemplateColumns:`repeat(${VP},${ts}px)`}}>{renderMap()}</div>
+          <div style={{display:"grid",gridTemplateColumns:`repeat(${VP},${ts}px)`,filter:tileFilter}}>{renderMap()}</div>
           {/* Effect overlay */}
           <div style={{position:"absolute",top:0,left:0,width:ts*VP,height:ts*VP,pointerEvents:"none",overflow:"hidden"}}>
             {effects.filter(f=>f.type!=="move").map(f=>{
