@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, memo } from "react";
 import { MAP_W, MAP_H, WALL, VP, VP_HALF, rand, MAX_FLOOR, MAX_INV, MAX_FULL, MAX_MP, DIRS_8, DIR_LABELS, toKey } from "./game/constants";
 import { getTheme, STATUS_INFO, SKILLS, SHOP_ITEMS, ENEMY_POOLS, CONSUMABLES, THROW_ITEMS, WEAPONS, ARMORS, THEMES, TRAP_TYPES } from "./game/data";
 import { initAudio, sfx, playBgm, stopBgm, playFloorBgm } from "./game/audio";
@@ -9,6 +9,14 @@ import { initState, getAtk, getDef, addMsg, addStatus, tickStatuses, killCheck, 
 import { Bar } from "./ui/Bar";
 import { Overlay } from "./ui/Overlay";
 import { TILE_SPRITES, ENEMY_SPRITES, ITEM_SPRITES, EQUIP_SPRITES, THEME_TINTS, SHEET_URL, SHEET_W, SHEET_H, PLAYER_SPRITE, MERCHANT_SPRITE, getFloorTileIdx } from "./game/sprites";
+
+// Stable component identity — prevents React unmount/remount on every render
+const DBtn=memo(({label,dx,dy,sz,ok,enemy,onMove})=>(
+  <button onClick={()=>{if(ok)onMove(dx,dy);}} style={{width:sz,height:sz,fontSize:enemy?15:17,border:"none",borderRadius:12,cursor:ok?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",
+    background:enemy?"rgba(239,68,68,0.12)":ok?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.01)",color:enemy?"#f87171":ok?"rgba(255,255,255,0.5)":"rgba(255,255,255,0.1)",WebkitTapHighlightColor:"transparent"}}>
+    {enemy?"⚔":label}
+  </button>
+));
 
 export default function Roguelike(){
   const [g,setG]=useState(null);
@@ -32,9 +40,10 @@ export default function Roguelike(){
   const saveBtnLayout=(layout)=>{setBtnLayout(layout);try{localStorage.setItem("rl_btnLayout",JSON.stringify(layout));}catch{}};
   const fxId=useRef(0);
   const spawnFx=useCallback((arr)=>{
-    const nfx=arr.map(f=>({...f,id:fxId.current++,ts:Date.now()}));
-    setEffects(p=>[...p,...nfx]);
-    setTimeout(()=>setEffects(p=>p.filter(f=>!nfx.some(n=>n.id===f.id))),650);
+    const now=Date.now();
+    const nfx=arr.map(f=>({...f,id:fxId.current++,ts:now}));
+    // Cleanup stale effects (>700ms) in same pass — no extra setTimeout render
+    setEffects(p=>[...p.filter(f=>now-f.ts<700),...nfx]);
   },[]);
   useEffect(()=>{
     if(g?.fx?.length>0) spawnFx(g.fx);
@@ -206,7 +215,6 @@ export default function Roguelike(){
     return(
       <div onClick={()=>{if(soundOn){initAudio();playBgm("title");}setScreen("title");}}
         style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:"linear-gradient(170deg,#0f172a 0%,#1a2332 50%,#0f172a 100%)",color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',sans-serif",cursor:"pointer",userSelect:"none",WebkitUserSelect:"none",position:"relative",overflow:"hidden"}}>
-        <style>{`@keyframes splash-blink{0%,100%{opacity:0.4}50%{opacity:1}}@keyframes splash-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}`}</style>
         <div style={{marginBottom:24,animation:"splash-float 3s ease-in-out infinite",filter:"drop-shadow(0 8px 16px rgba(0,0,0,0.6))"}}>
           <img src={PLAYER_SPRITE} alt="" style={{width:64,height:96,imageRendering:"pixelated"}}/>
         </div>
@@ -222,16 +230,6 @@ export default function Roguelike(){
   if(screen==="title"){
     return(
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:"linear-gradient(170deg,#0f172a 0%,#1a2332 50%,#0f172a 100%)",color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',sans-serif",padding:32,paddingTop:"max(32px, env(safe-area-inset-top))",textAlign:"center",boxSizing:"border-box",position:"relative",overflow:"hidden"}}>
-        <style>{`
-          @keyframes title-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-          @keyframes title-glow{0%,100%{text-shadow:0 0 12px rgba(251,191,36,0.3),0 2px 8px rgba(0,0,0,0.5)}50%{text-shadow:0 0 24px rgba(251,191,36,0.5),0 2px 8px rgba(0,0,0,0.5)}}
-          @keyframes title-torch{0%,100%{opacity:0.6;transform:scaleY(1)}50%{opacity:1;transform:scaleY(1.1)}}
-          @keyframes title-btn{0%,100%{box-shadow:0 6px 24px rgba(245,158,11,0.35)}50%{box-shadow:0 6px 32px rgba(245,158,11,0.55)}}
-          @keyframes title-particle{0%{opacity:0;transform:translateY(0)}20%{opacity:0.6}100%{opacity:0;transform:translateY(-60px)}}
-          @keyframes sparkle{0%{opacity:0;transform:scale(0) rotate(0deg)}25%{opacity:1;transform:scale(1) rotate(90deg)}50%{opacity:0.6;transform:scale(0.6) rotate(180deg)}75%{opacity:1;transform:scale(1) rotate(270deg)}100%{opacity:0;transform:scale(0) rotate(360deg)}}
-          @keyframes sparkle-drift{0%{transform:translateY(0)}100%{transform:translateY(-20px)}}
-          @keyframes shooting-star{0%{opacity:0;transform:translateX(0) translateY(0)}10%{opacity:1}70%{opacity:0.6}100%{opacity:0;transform:translateX(var(--ss-dx)) translateY(var(--ss-dy))}}
-        `}</style>
         {/* Sparkle particles */}
         {[...Array(24)].map((_,i)=>{const colors=["#fbbf24","#f59e0b","#fcd34d","#fff7ed","#67e8f9","#a78bfa"];
           return <div key={`sp${i}`} style={{position:"absolute",zIndex:0,pointerEvents:"none",
@@ -401,11 +399,6 @@ export default function Roguelike(){
     const victoryBg=g.victory?"linear-gradient(170deg,#1a1a2e 0%,#16213e 50%,#1a1a2e 100%)":"linear-gradient(170deg,#1a0a0a 0%,#2d1b1b 50%,#1a0a0a 100%)";
     return(
       <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100dvh",background:victoryBg,color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',sans-serif",padding:32,paddingTop:"max(32px, env(safe-area-inset-top))",textAlign:"center",boxSizing:"border-box",position:"relative",overflow:"hidden"}}>
-        <style>{`
-          @keyframes go-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
-          @keyframes go-glow{0%,100%{filter:drop-shadow(0 4px 12px rgba(251,191,36,0.3))}50%{filter:drop-shadow(0 4px 24px rgba(251,191,36,0.6))}}
-          @keyframes go-fade{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}
-        `}</style>
         {/* Sprite character */}
         <div style={{marginBottom:16,animation:g.victory?"go-float 3s ease-in-out infinite, go-glow 3s ease-in-out infinite":"go-float 4s ease-in-out infinite",filter:g.victory?undefined:"grayscale(0.5) brightness(0.7)"}}>
           <img src={PLAYER_SPRITE} alt="" style={{width:64,height:96,imageRendering:"pixelated"}}/>
@@ -576,14 +569,6 @@ export default function Roguelike(){
     return g.enemies.some(e=>e.hp>0&&e.x===nx&&e.y===ny);
   };
 
-  const DBtn=({label,dx,dy,sz=50})=>{
-    const ok=canAct(dx,dy);
-    const enemy=ok&&hasEnemy(dx,dy);
-    return <button onClick={()=>{if(ok)processTurn(dx,dy);}} style={{width:sz,height:sz,fontSize:enemy?15:17,border:"none",borderRadius:12,cursor:ok?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",
-      background:enemy?"rgba(239,68,68,0.12)":ok?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.01)",color:enemy?"#f87171":ok?"rgba(255,255,255,0.5)":"rgba(255,255,255,0.1)",WebkitTapHighlightColor:"transparent"}}>
-      {enemy?"⚔":label}
-    </button>;
-  };
 
   return(
     <div onTouchStart={handleTS} onTouchEnd={handleTE}
@@ -610,19 +595,6 @@ export default function Roguelike(){
 
       {/* ── MAP AREA ── */}
       <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden",minHeight:0}}>
-        <style>{`
-          @keyframes fx-shake{0%,100%{transform:translate(0,0)}15%{transform:translate(-3px,-2px)}30%{transform:translate(3px,2px)}45%{transform:translate(-2px,1px)}60%{transform:translate(2px,-1px)}75%{transform:translate(-1px,2px)}}
-          @keyframes fx-flash{0%{opacity:0.9;transform:scale(1.1)}100%{opacity:0;transform:scale(0.5)}}
-          @keyframes fx-dmg{0%{opacity:1;transform:translateY(0) scale(1)}50%{opacity:1;transform:translateY(-18px) scale(1.1)}100%{opacity:0;transform:translateY(-30px) scale(0.7)}}
-          @keyframes fx-kill{0%{opacity:1;transform:scale(1)}40%{opacity:0.8;transform:scale(1.4)}100%{opacity:0;transform:scale(0.1) rotate(180deg)}}
-          @keyframes fx-particle{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--px),var(--py)) scale(0)}}
-          @keyframes fx-playerHit{0%{background:rgba(255,60,60,0.5)}100%{background:transparent}}
-          @keyframes fx-skill{0%{opacity:0.8;transform:scale(0.5)}30%{opacity:0.6;transform:scale(1.05)}100%{opacity:0;transform:scale(1.2)}}
-          @keyframes fx-heal{0%{opacity:0.7;box-shadow:0 0 8px #4ade80}100%{opacity:0;box-shadow:0 0 20px transparent}}
-          @keyframes stairs-pulse{0%,100%{opacity:0.25;transform:scale(0.9)}50%{opacity:0.6;transform:scale(1.05)}}
-          @keyframes stairs-arrow{0%,100%{transform:translateY(0);opacity:0.9}50%{transform:translateY(3px);opacity:0.5}}
-          @keyframes entity-slide{from{translate:var(--sx) var(--sy)}to{translate:0 0}}
-        `}</style>
         {(()=>{const{tiles,overlays}=renderMap();return <div style={{position:"relative",borderRadius:10,overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.4)"}}>
           <div style={{display:"grid",gridTemplateColumns:`repeat(${VP},${ts}px)`}}>{tiles}</div>
           {/* Theme tint overlay - single div, zero GPU filter cost */}
@@ -741,11 +713,11 @@ export default function Roguelike(){
               <SideBtn id={btnLayout[0]}/><SideBtn id={btnLayout[1]}/>
             </div>
             <div style={{display:"grid",gridTemplateColumns:`repeat(3,${BS}px)`,gap:BG}}>
-              <DBtn label="↖" dx={-1} dy={-1} sz={BS}/><DBtn label="↑" dx={0} dy={-1} sz={BS}/><DBtn label="↗" dx={1} dy={-1} sz={BS}/>
-              <DBtn label="←" dx={-1} dy={0} sz={BS}/>
+              <DBtn label="↖" dx={-1} dy={-1} sz={BS} ok={canAct(-1,-1)} enemy={canAct(-1,-1)&&hasEnemy(-1,-1)} onMove={processTurn}/><DBtn label="↑" dx={0} dy={-1} sz={BS} ok={canAct(0,-1)} enemy={canAct(0,-1)&&hasEnemy(0,-1)} onMove={processTurn}/><DBtn label="↗" dx={1} dy={-1} sz={BS} ok={canAct(1,-1)} enemy={canAct(1,-1)&&hasEnemy(1,-1)} onMove={processTurn}/>
+              <DBtn label="←" dx={-1} dy={0} sz={BS} ok={canAct(-1,0)} enemy={canAct(-1,0)&&hasEnemy(-1,0)} onMove={processTurn}/>
               <button onClick={()=>processTurn(0,0)} style={{width:BS,height:BS,fontSize:9,fontWeight:700,border:"none",borderRadius:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,0.08)",color:"#94a3b8",WebkitTapHighlightColor:"transparent"}}>待機</button>
-              <DBtn label="→" dx={1} dy={0} sz={BS}/>
-              <DBtn label="↙" dx={-1} dy={1} sz={BS}/><DBtn label="↓" dx={0} dy={1} sz={BS}/><DBtn label="↘" dx={1} dy={1} sz={BS}/>
+              <DBtn label="→" dx={1} dy={0} sz={BS} ok={canAct(1,0)} enemy={canAct(1,0)&&hasEnemy(1,0)} onMove={processTurn}/>
+              <DBtn label="↙" dx={-1} dy={1} sz={BS} ok={canAct(-1,1)} enemy={canAct(-1,1)&&hasEnemy(-1,1)} onMove={processTurn}/><DBtn label="↓" dx={0} dy={1} sz={BS} ok={canAct(0,1)} enemy={canAct(0,1)&&hasEnemy(0,1)} onMove={processTurn}/><DBtn label="↘" dx={1} dy={1} sz={BS} ok={canAct(1,1)} enemy={canAct(1,1)&&hasEnemy(1,1)} onMove={processTurn}/>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:BG}}>
               <SideBtn id={btnLayout[2]}/><SideBtn id={btnLayout[3]}/>
