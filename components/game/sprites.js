@@ -101,21 +101,13 @@ export const EQUIP_SPRITES = {
   '聖盾':     '/sprites/item_shield_holy.png',
 };
 
-// Theme CSS filters for tileset color variation
-export const THEME_FILTERS = [
-  'none',                                         // 洞窟 (base)
-  'hue-rotate(80deg) saturate(1.3)',               // 森林 (green)
-  'hue-rotate(180deg) brightness(1.15)',           // 氷穴 (cyan)
-  'hue-rotate(-20deg) saturate(1.5) brightness(0.9)', // 溶岩 (red)
-  'brightness(0.5) saturate(0.4)',                 // 闇域 (dark)
-];
-// Inverse filters to cancel parent theme filter on overlays
-export const THEME_FILTERS_INV = [
-  'none',
-  'saturate(0.77) hue-rotate(-80deg)',
-  'brightness(0.87) hue-rotate(-180deg)',
-  'brightness(1.11) saturate(0.67) hue-rotate(20deg)',
-  'saturate(2.5) brightness(2)',
+// Theme color overlays (replaces CSS filter for zero GPU cost)
+export const THEME_TINTS = [
+  null,                              // 洞窟 (base, no tint)
+  'rgba(0,160,50,0.18)',             // 森林 (green)
+  'rgba(0,160,240,0.18)',            // 氷穴 (cyan)
+  'rgba(240,70,0,0.18)',             // 溶岩 (red/orange)
+  'rgba(0,0,0,0.4)',                 // 闇域 (dark)
 ];
 
 // Tileset sheet dimensions

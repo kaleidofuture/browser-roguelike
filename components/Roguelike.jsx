@@ -8,7 +8,7 @@ import { calcVis } from "./game/dungeon";
 import { initState, getAtk, getDef, addMsg, addStatus, tickStatuses, killCheck, levelUp, nextFloor, applyTrap, applyFull, applyPStatus, checkEvents, moveEnemies } from "./game/state";
 import { Bar } from "./ui/Bar";
 import { Overlay } from "./ui/Overlay";
-import { TILE_SPRITES, ENEMY_SPRITES, ITEM_SPRITES, EQUIP_SPRITES, THEME_FILTERS, SHEET_URL, SHEET_W, SHEET_H, PLAYER_SPRITE, MERCHANT_SPRITE, getFloorTileIdx } from "./game/sprites";
+import { TILE_SPRITES, ENEMY_SPRITES, ITEM_SPRITES, EQUIP_SPRITES, THEME_TINTS, SHEET_URL, SHEET_W, SHEET_H, PLAYER_SPRITE, MERCHANT_SPRITE, getFloorTileIdx } from "./game/sprites";
 
 export default function Roguelike(){
   const [g,setG]=useState(null);
@@ -437,7 +437,7 @@ export default function Roguelike(){
   const mapPx=ts*VP;
 
   const themeIdx=Math.min(Math.floor((g.floor-1)/2), THEME_FILTERS.length-1);
-  const tileFilter=THEME_FILTERS[themeIdx];
+  const themeTint=THEME_TINTS[themeIdx];
   const scale=ts/16;
 
   const tileSpriteBg=(sprite)=>{
@@ -624,8 +624,10 @@ export default function Roguelike(){
           @keyframes entity-slide{from{translate:var(--sx) var(--sy)}to{translate:0 0}}
         `}</style>
         {(()=>{const{tiles,overlays}=renderMap();return <div style={{position:"relative",borderRadius:10,overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.4)"}}>
-          <div style={{display:"grid",gridTemplateColumns:`repeat(${VP},${ts}px)`,filter:tileFilter}}>{tiles}</div>
-          {/* Entity/item overlay - NO CSS filter (separate DOM tree) */}
+          <div style={{display:"grid",gridTemplateColumns:`repeat(${VP},${ts}px)`}}>{tiles}</div>
+          {/* Theme tint overlay - single div, zero GPU filter cost */}
+          {themeTint&&<div style={{position:"absolute",top:0,left:0,width:mapPx,height:mapPx,background:themeTint,pointerEvents:"none"}}/>}
+          {/* Entity/item overlay */}
           <div style={{position:"absolute",top:0,left:0,width:mapPx,height:mapPx,pointerEvents:"none"}}>{overlays}</div>
           {/* Effect overlay */}
           <div style={{position:"absolute",top:0,left:0,width:mapPx,height:mapPx,pointerEvents:"none",overflow:"hidden"}}>
