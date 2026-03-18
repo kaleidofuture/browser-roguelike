@@ -173,4 +173,6 @@ export function moveEnemies(s,saveScore){let ns={...s,enemies:s.enemies.map(e=>(
       }
     }
   }
+  // Purge dead enemies to prevent array bloat
+  if(ns.turns%10===0)ns.enemies=ns.enemies.filter(e=>e.hp>0);
   return ns;}

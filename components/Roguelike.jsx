@@ -685,7 +685,7 @@ export default function Roguelike(){
         {/* Enemy HP overlay */}
         {nearE.length>0&&<div style={{position:"absolute",top:8,left:8,maxWidth:"60%",pointerEvents:"none"}}>
           {nearE.slice(0,3).map(e=>(
-            <div key={e.id} style={{display:"flex",alignItems:"center",gap:4,marginBottom:3,background:"rgba(0,0,0,0.6)",borderRadius:6,padding:"3px 8px",backdropFilter:"blur(4px)"}}>
+            <div key={e.id} style={{display:"flex",alignItems:"center",gap:4,marginBottom:3,background:"rgba(0,0,0,0.75)",borderRadius:6,padding:"3px 8px"}}>
               <span style={{fontSize:9,color:e.color,fontWeight:600,whiteSpace:"nowrap"}}>{e.char}{e.name}</span>
               <div style={{flex:1,minWidth:40}}><Bar value={e.hp} max={e.maxHp} h={4} color={e.hp/e.maxHp>0.5?"#22c55e":e.hp/e.maxHp>0.25?"#eab308":"#ef4444"}/></div>
               <span style={{fontSize:7,color:"#94a3b8"}}>{e.hp}</span>
@@ -694,7 +694,7 @@ export default function Roguelike(){
         </div>}
 
         {/* Messages overlay */}
-        <div style={{position:"absolute",bottom:4,left:4,right:4,pointerEvents:"none",background:"rgba(0,0,0,0.55)",borderRadius:6,padding:"4px 8px",border:"1px solid rgba(255,255,255,0.06)",backdropFilter:"blur(2px)"}}>
+        <div style={{position:"absolute",bottom:4,left:4,right:4,pointerEvents:"none",background:"rgba(0,0,0,0.7)",borderRadius:6,padding:"4px 8px",border:"1px solid rgba(255,255,255,0.06)"}}>
           {recentM.map((m,i)=><div key={i} style={{fontSize:10,color:i===recentM.length-1?"#e2e8f0":"#64748b",lineHeight:1.5,
             fontFamily:"'Hiragino Sans','Noto Sans JP',monospace"}}>{m}</div>)}
         </div>
@@ -879,19 +879,19 @@ export default function Roguelike(){
         <button onClick={()=>setModal(null)} style={{marginTop:14,padding:"10px",fontSize:13,fontWeight:600,background:"rgba(255,255,255,0.06)",color:"#94a3b8",border:"none",borderRadius:10,cursor:"pointer",width:"100%"}}>閉じる</button>
       </Overlay>}
 
-      {/* ── MINIMAP ── */}
+      {/* ── MINIMAP (Canvas) ── */}
       {modal==="map"&&<Overlay onClose={()=>setModal(null)}>
         <h3 style={{color:"#60a5fa",margin:"0 0 12px",fontSize:16,fontWeight:700,textAlign:"center"}}>🗺 B{g.floor}F {theme.name}</h3>
-        <div style={{display:"grid",gridTemplateColumns:`repeat(${MAP_W},7px)`,gap:0,justifyContent:"center",borderRadius:8,overflow:"hidden"}}>
-          {Array.from({length:MAP_H},(_,my)=>Array.from({length:MAP_W},(_2,mx)=>{
+        <canvas ref={el=>{if(!el)return;const S=7,ctx=el.getContext("2d");el.width=MAP_W*S;el.height=MAP_H*S;
+          for(let my=0;my<MAP_H;my++)for(let mx=0;mx<MAP_W;mx++){
             const k=toKey(mx,my),isE=g.explored.has(k);let c="#08080c";
             if(isE){c=g.map[my][mx]===WALL?theme.wall:theme.floor;
               if(mx===g.px&&my===g.py)c="#38bdf8";
               else if(mx===g.stairs.x&&my===g.stairs.y)c="#a78bfa";
               else if(g.merchant&&mx===g.merchant.x&&my===g.merchant.y)c="#fbbf24";
               else{const he=g.enemies.find(e=>e.hp>0&&e.x===mx&&e.y===my&&g.visible.has(k));if(he)c="#ef4444";}}
-            return <div key={`${mx}-${my}`} style={{width:7,height:7,backgroundColor:c}}/>;}))}
-        </div>
+            ctx.fillStyle=c;ctx.fillRect(mx*S,my*S,S,S);}
+        }} style={{borderRadius:8,display:"block",margin:"0 auto"}}/>
         <div style={{display:"flex",gap:12,marginTop:10,fontSize:10,color:"#64748b",justifyContent:"center"}}>
           <span><span style={{color:"#38bdf8"}}>■</span> 自分</span><span><span style={{color:"#a78bfa"}}>■</span> 階段</span>
           <span><span style={{color:"#ef4444"}}>■</span> 敵</span><span><span style={{color:"#fbbf24"}}>■</span> 商人</span></div>
