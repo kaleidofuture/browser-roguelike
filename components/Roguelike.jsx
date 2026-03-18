@@ -672,7 +672,8 @@ export default function Roguelike(){
         {nearE.length>0&&<div style={{position:"absolute",top:8,left:8,maxWidth:"60%",pointerEvents:"none"}}>
           {nearE.slice(0,3).map(e=>(
             <div key={e.id} style={{display:"flex",alignItems:"center",gap:4,marginBottom:3,background:"rgba(0,0,0,0.75)",borderRadius:6,padding:"3px 8px"}}>
-              <span style={{fontSize:9,color:e.color,fontWeight:600,whiteSpace:"nowrap"}}>{e.char}{e.name}</span>
+              {ENEMY_SPRITES[e.char]?<img src={ENEMY_SPRITES[e.char]} alt="" style={{width:14,height:17,imageRendering:"pixelated",objectFit:"contain",flexShrink:0}}/>:null}
+              <span style={{fontSize:9,color:e.color,fontWeight:600,whiteSpace:"nowrap"}}>{e.name}</span>
               <div style={{flex:1,minWidth:40}}><Bar value={e.hp} max={e.maxHp} h={4} color={e.hp/e.maxHp>0.5?"#22c55e":e.hp/e.maxHp>0.25?"#eab308":"#ef4444"}/></div>
               <span style={{fontSize:7,color:"#94a3b8"}}>{e.hp}</span>
               {Object.keys(e.statuses).length>0&&<span style={{fontSize:7}}>{Object.keys(e.statuses).map(k=>STATUS_INFO[k]?.icon||"").join("")}</span>}
