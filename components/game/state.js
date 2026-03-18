@@ -64,15 +64,23 @@ export function checkEvents(s){let ns={...s};for(const ev of ns.events){if(ev.tr
 
 export function moveEnemies(s,saveScore){let ns={...s,enemies:s.enemies.map(e=>({...e}))};
   const isMrc=(x,y)=>ns.merchant&&x===ns.merchant.x&&y===ns.merchant.y;
+  // Perf: O(1) position lookups instead of O(N) enemies.some()
+  const posSet=new Set();
+  for(const e of ns.enemies)if(e.hp>0)posSet.add(toKey(e.x,e.y));
+  // Cache player room once (was recalculated per enemy)
+  const pRoom=ns.rooms.find(r=>ns.px>=r.x&&ns.px<r.x+r.w&&ns.py>=r.y&&ns.py<r.y+r.h);
+  const MAX_ENEMIES=20;
+  const BFS_DIRS=[[0,-1],[0,1],[-1,0],[1,0],[1,-1],[1,1],[-1,1],[-1,-1]];
   for(const e of ns.enemies){if(e.hp<=0||e.sleeping)continue;
     if(e.statuses.sleep){e.statuses=tickStatuses(e.statuses);continue;}
     if(e.statuses.para&&Math.random()<0.4){e.statuses=tickStatuses(e.statuses);continue;}
-    if(e.statuses.poison){e.hp-=2;if(e.hp<=0){ns.msgs=addMsg(ns,`${e.name}は毒で倒れた！`);e.statuses=tickStatuses(e.statuses);continue;}}
+    if(e.statuses.poison){e.hp-=2;if(e.hp<=0){ns.msgs=addMsg(ns,`${e.name}は毒で倒れた！`);posSet.delete(toKey(e.x,e.y));e.statuses=tickStatuses(e.statuses);continue;}}
     e.statuses=tickStatuses(e.statuses);
     const dist=Math.max(Math.abs(e.x-ns.px),Math.abs(e.y-ns.py));
+    const oldKey=toKey(e.x,e.y);
+    posSet.delete(oldKey);
 
     const eRoom=ns.rooms.find(r=>e.x>=r.x&&e.x<r.x+r.w&&e.y>=r.y&&e.y<r.y+r.h);
-    const pRoom=ns.rooms.find(r=>ns.px>=r.x&&ns.px<r.x+r.w&&ns.py>=r.y&&ns.py<r.y+r.h);
     const sameRoom=eRoom&&pRoom&&eRoom===pRoom;
     let canSee=sameRoom||dist<=1;
     if(!canSee){
@@ -88,8 +96,8 @@ export function moveEnemies(s,saveScore){let ns={...s,enemies:s.enemies.map(e=>(
     else if(e.aware){e.awareLost=(e.awareLost||0)+1;if(e.awareLost>10)e.aware=false;}
 
     if(e.statuses.confuse){const d=DIRS_8[rand(0,7)],nx=e.x+d[0],ny=e.y+d[1];
-      if(nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H&&ns.map[ny][nx]!==WALL&&!(nx===ns.px&&ny===ns.py)&&!ns.enemies.some(o=>o.id!==e.id&&o.hp>0&&o.x===nx&&o.y===ny)&&!isMrc(nx,ny)
-        &&(d[0]===0||d[1]===0||(ns.map[e.y][e.x+d[0]]!==WALL&&ns.map[e.y+d[1]][e.x]!==WALL))){if(d[0]!==0)e.facing=d[0]>0?1:-1;e.x=nx;e.y=ny;}continue;}
+      if(nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H&&ns.map[ny][nx]!==WALL&&!(nx===ns.px&&ny===ns.py)&&!posSet.has(toKey(nx,ny))&&!isMrc(nx,ny)
+        &&(d[0]===0||d[1]===0||(ns.map[e.y][e.x+d[0]]!==WALL&&ns.map[e.y+d[1]][e.x]!==WALL))){if(d[0]!==0)e.facing=d[0]>0?1:-1;e.x=nx;e.y=ny;}posSet.add(toKey(e.x,e.y));continue;}
 
     if(e.ai==="ranged"&&dist<=5&&dist>1){
       const ddx=ns.px-e.x,ddy=ns.py-e.y;
@@ -98,19 +106,22 @@ export function moveEnemies(s,saveScore){let ns={...s,enemies:s.enemies.map(e=>(
         const sx=ddx===0?0:(ddx>0?1:-1),sy=ddy===0?0:(ddy>0?1:-1);
         let clear=true,cx=e.x+sx,cy=e.y+sy;
         while(!(cx===ns.px&&cy===ns.py)){
-          if(cx<0||cx>=MAP_W||cy<0||cy>=MAP_H||ns.map[cy][cx]===WALL||ns.enemies.some(o=>o.id!==e.id&&o.hp>0&&o.x===cx&&o.y===cy)){clear=false;break;}
+          if(cx<0||cx>=MAP_W||cy<0||cy>=MAP_H||ns.map[cy][cx]===WALL||posSet.has(toKey(cx,cy))){clear=false;break;}
           cx+=sx;cy+=sy;}
         if(clear){
           if(ddx!==0)e.facing=ddx>0?1:-1;
           const dmg=Math.max(1,e.atk-getDef(ns)+rand(-2,2));ns.hp-=dmg;ns.msgs=addMsg(ns,`${e.name}の遠距離攻撃！${dmg}dmg`);ns.pendingSfx="hit";
           ns.fx=[...(ns.fx||[]),{type:"playerHit",x:ns.px,y:ns.py},{type:"dmg",x:ns.px,y:ns.py,val:`-${dmg}`,color:"#f97316"}];
-          ns=killCheck(ns,saveScore);if(ns.gameOver)return ns;continue;}}}
+          ns=killCheck(ns,saveScore);if(ns.gameOver)return ns;posSet.add(toKey(e.x,e.y));continue;}}}
 
-    if(e.ai==="caller"&&e.aware&&dist<=6&&Math.random()<0.12){const r2=ns.rooms.find(r=>e.x>=r.x&&e.x<r.x+r.w&&e.y>=r.y&&e.y<r.y+r.h);
+    if(e.ai==="caller"&&e.aware&&dist<=6&&Math.random()<0.12&&ns.enemies.filter(o=>o.hp>0).length<MAX_ENEMIES){
+      const r2=ns.rooms.find(r=>e.x>=r.x&&e.x<r.x+r.w&&e.y>=r.y&&e.y<r.y+r.h);
       if(r2){const pool=ENEMY_POOLS[Math.min(Math.floor((ns.floor-1)/2),ENEMY_POOLS.length-1)],t=pool[rand(0,pool.length-1)],sc=1+ns.floor*0.15,nx=rand(r2.x,r2.x+r2.w-1),ny=rand(r2.y,r2.y+r2.h-1);
-        if(ns.map[ny][nx]===FLOOR&&!ns.enemies.some(o=>o.hp>0&&o.x===nx&&o.y===ny)&&!(nx===ns.px&&ny===ns.py)&&!isMrc(nx,ny)){
+        const nk=toKey(nx,ny);
+        if(ns.map[ny][nx]===FLOOR&&!posSet.has(nk)&&!(nx===e.x&&ny===e.y)&&!(nx===ns.px&&ny===ns.py)&&!isMrc(nx,ny)){
           ns.enemies.push({...t,id:`c_${Date.now()}_${Math.random()}`,x:nx,y:ny,hp:Math.floor(t.hp*sc),maxHp:Math.floor(t.hp*sc),atk:Math.floor(t.atk*sc),def:t.def,statuses:{}});
-          ns.msgs=addMsg(ns,`${e.name}が仲間を呼んだ！`);}}continue;}
+          posSet.add(nk);
+          ns.msgs=addMsg(ns,`${e.name}が仲間を呼んだ！`);}}posSet.add(toKey(e.x,e.y));continue;}
 
     if(dist<=1){
       const edx=ns.px-e.x;if(edx!==0)e.facing=edx>0?1:-1;
@@ -118,14 +129,13 @@ export function moveEnemies(s,saveScore){let ns={...s,enemies:s.enemies.map(e=>(
       ns.fx=[...(ns.fx||[]),{type:"playerHit",x:ns.px,y:ns.py},{type:"dmg",x:ns.px,y:ns.py,val:`-${dmg}`,color:"#f87171"}];
       if(["poison","confuse","sleep","para","slow"].includes(e.ai)&&Math.random()<0.35&&!ns.statuses[e.ai]){
         const dur=STATUS_INFO[e.ai]?.dur||5;ns=addStatus(ns,e.ai,dur);ns.msgs=addMsg(ns,`${STATUS_INFO[e.ai]?.icon||""} ${STATUS_INFO[e.ai]?.name}！`);}
-      ns=killCheck(ns,saveScore);if(ns.gameOver)return ns;continue;}
+      ns=killCheck(ns,saveScore);if(ns.gameOver)return ns;posSet.add(toKey(e.x,e.y));continue;}
 
     if(e.ai==="erratic"&&!e.aware&&Math.random()<0.3){const d=DIRS_8[rand(0,7)],nx=e.x+d[0],ny=e.y+d[1];
-      if(nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H&&ns.map[ny][nx]!==WALL&&!(nx===ns.px&&ny===ns.py)&&!ns.enemies.some(o=>o.id!==e.id&&o.hp>0&&o.x===nx&&o.y===ny)&&!isMrc(nx,ny)
-        &&(d[0]===0||d[1]===0||(ns.map[e.y][e.x+d[0]]!==WALL&&ns.map[e.y+d[1]][e.x]!==WALL))){if(d[0]!==0)e.facing=d[0]>0?1:-1;e.x=nx;e.y=ny;}continue;}
+      if(nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H&&ns.map[ny][nx]!==WALL&&!(nx===ns.px&&ny===ns.py)&&!posSet.has(toKey(nx,ny))&&!isMrc(nx,ny)
+        &&(d[0]===0||d[1]===0||(ns.map[e.y][e.x+d[0]]!==WALL&&ns.map[e.y+d[1]][e.x]!==WALL))){if(d[0]!==0)e.facing=d[0]>0?1:-1;e.x=nx;e.y=ny;}posSet.add(toKey(e.x,e.y));continue;}
 
     if(e.aware){
-      const BFS_DIRS=[[0,-1],[0,1],[-1,0],[1,0],[1,-1],[1,1],[-1,1],[-1,-1]];
       const path=(()=>{
         const Q=[{x:e.x,y:e.y,steps:null,depth:0}],visited=new Set([toKey(e.x,e.y)]);
         let qi=0;
@@ -138,7 +148,7 @@ export function moveEnemies(s,saveScore){let ns={...s,enemies:s.enemies.map(e=>(
             if(ddx!==0&&ddy!==0&&(ns.map[cy][cx+ddx]===WALL||ns.map[cy+ddy][cx]===WALL))continue;
             if(nx2===ns.px&&ny2===ns.py){if(steps)return steps;continue;}
             visited.add(k2);
-            if(!ns.enemies.some(o=>o.id!==e.id&&o.hp>0&&o.x===nx2&&o.y===ny2)&&!isMrc(nx2,ny2))
+            if(!posSet.has(k2)&&!isMrc(nx2,ny2))
               Q.push({x:nx2,y:ny2,steps:steps||{x:nx2,y:ny2},depth:depth+1});
           }
         }return null;
@@ -151,13 +161,15 @@ export function moveEnemies(s,saveScore){let ns={...s,enemies:s.enemies.map(e=>(
       for(const[ddx,ddy] of tryDirs){
         const nx3=e.x+ddx,ny3=e.y+ddy;
         if(nx3>=0&&nx3<MAP_W&&ny3>=0&&ny3<MAP_H&&ns.map[ny3][nx3]!==WALL
-          &&!(nx3===ns.px&&ny3===ns.py)&&!ns.enemies.some(o=>o.id!==e.id&&o.hp>0&&o.x===nx3&&o.y===ny3)&&!isMrc(nx3,ny3)
+          &&!(nx3===ns.px&&ny3===ns.py)&&!posSet.has(toKey(nx3,ny3))&&!isMrc(nx3,ny3)
           &&(ddx===0||ddy===0||(ns.map[e.y][e.x+ddx]!==WALL&&ns.map[e.y+ddy][e.x]!==WALL))){
           if(ddx!==0)e.facing=ddx>0?1:-1;e.x=nx3;e.y=ny3;e.pDir=[ddx,ddy];moved=true;break;}}
       if(!moved)e.pDir=DIRS_8[rand(0,7)];
-    }}
-  // Natural spawn
-  if(ns.turns>0&&ns.turns%30===0){
+    }posSet.add(toKey(e.x,e.y));}
+  // Purge dead enemies every turn
+  ns.enemies=ns.enemies.filter(e=>e.hp>0);
+  // Natural spawn (only if under cap)
+  if(ns.turns>0&&ns.turns%30===0&&ns.enemies.length<MAX_ENEMIES){
     const pool=ENEMY_POOLS[Math.min(Math.floor((ns.floor-1)/2),ENEMY_POOLS.length-1)];
     const sc=1+ns.floor*0.15;
     const candidates=ns.rooms.filter(r=>!(ns.px>=r.x&&ns.px<r.x+r.w&&ns.py>=r.y&&ns.py<r.y+r.h));
@@ -166,13 +178,11 @@ export function moveEnemies(s,saveScore){let ns={...s,enemies:s.enemies.map(e=>(
       const sx=rand(r.x,r.x+r.w-1),sy=rand(r.y,r.y+r.h-1);
       const sk=toKey(sx,sy);
       const isMrcSp=ns.merchant&&sx===ns.merchant.x&&sy===ns.merchant.y;
-      if(ns.map[sy][sx]===FLOOR&&!ns.visible.has(sk)&&!ns.enemies.some(e2=>e2.hp>0&&e2.x===sx&&e2.y===sy)&&!isMrcSp){
+      if(ns.map[sy][sx]===FLOOR&&!ns.visible.has(sk)&&!posSet.has(sk)&&!isMrcSp){
         const t=pool[rand(0,pool.length-1)];
         ns.enemies.push({...t,id:`sp_${ns.turns}_${Math.random()}`,x:sx,y:sy,hp:Math.floor(t.hp*sc),maxHp:Math.floor(t.hp*sc),atk:Math.floor(t.atk*sc),def:t.def,statuses:{}});
         break;
       }
     }
   }
-  // Purge dead enemies to prevent array bloat
-  if(ns.turns%10===0)ns.enemies=ns.enemies.filter(e=>e.hp>0);
   return ns;}

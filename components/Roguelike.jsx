@@ -8,7 +8,7 @@ import { calcVis } from "./game/dungeon";
 import { initState, getAtk, getDef, addMsg, addStatus, tickStatuses, killCheck, levelUp, nextFloor, applyTrap, applyFull, applyPStatus, checkEvents, moveEnemies } from "./game/state";
 import { Bar } from "./ui/Bar";
 import { Overlay } from "./ui/Overlay";
-import { TILE_SPRITES, ENEMY_SPRITES, ITEM_SPRITES, EQUIP_SPRITES, THEME_FILTERS, THEME_FILTERS_INV, SHEET_URL, SHEET_W, SHEET_H, PLAYER_SPRITE, MERCHANT_SPRITE, getFloorTileIdx } from "./game/sprites";
+import { TILE_SPRITES, ENEMY_SPRITES, ITEM_SPRITES, EQUIP_SPRITES, THEME_FILTERS, SHEET_URL, SHEET_W, SHEET_H, PLAYER_SPRITE, MERCHANT_SPRITE, getFloorTileIdx } from "./game/sprites";
 
 export default function Roguelike(){
   const [g,setG]=useState(null);
@@ -36,10 +36,8 @@ export default function Roguelike(){
     setEffects(p=>[...p,...nfx]);
     setTimeout(()=>setEffects(p=>p.filter(f=>!nfx.some(n=>n.id===f.id))),650);
   },[]);
-  const prevTurn=useRef(0);
   useEffect(()=>{
-    if(g?.fx?.length>0){
-      prevTurn.current=g.turns;spawnFx(g.fx);setG(p=>p?{...p,fx:[]}:p);}
+    if(g?.fx?.length>0) spawnFx(g.fx);
   },[g?.turns,g?.fx?.length]);
 
   useEffect(()=>{try{const r=localStorage.getItem("rl_scores3");if(r)setScores(JSON.parse(r));}catch{}},[]);
@@ -440,7 +438,6 @@ export default function Roguelike(){
 
   const themeIdx=Math.min(Math.floor((g.floor-1)/2), THEME_FILTERS.length-1);
   const tileFilter=THEME_FILTERS[themeIdx];
-  const tileFilterInv=THEME_FILTERS_INV[themeIdx];
   const scale=ts/16;
 
   const tileSpriteBg=(sprite)=>{
@@ -455,13 +452,21 @@ export default function Roguelike(){
 
 
 
-  const renderMap=()=>{const tiles=[];
+  const renderMap=()=>{const tiles=[];const overlays=[];
+    // Spatial indices: O(1) lookups instead of O(N) per tile
+    const enemyAt=new Map();
+    for(const e of g.enemies)if(e.hp>0)enemyAt.set(toKey(e.x,e.y),e);
+    const itemAt=new Map();
+    for(const it of g.items)itemAt.set(toKey(it.x,it.y),it);
+    const trapAt=new Map();
+    for(const tr of g.traps)if(tr.visible)trapAt.set(toKey(tr.x,tr.y),tr);
+
     for(let vy=0;vy<VP;vy++)for(let vx=0;vx<VP;vx++){
       const mx=g.px-VP_HALF+vx,my=g.py-VP_HALF+vy,key=toKey(mx,my),inB=mx>=0&&mx<MAP_W&&my>=0&&my<MAP_H;
       const isV=inB&&g.visible.has(key),isE=inB&&g.explored.has(key);
       let op=1;
-      let entitySprite=null; // {src, isTall}
-      let itemSprite=null; // tileset sprite key
+      let entitySprite=null;
+      let itemSprite=null;
       let isWall=false;
 
       if(inB&&(isV||isE)){
@@ -471,13 +476,13 @@ export default function Roguelike(){
           if(mx===g.px&&my===g.py){entitySprite={src:PLAYER_SPRITE,isTall:true,facing:g.facing||1,isPlayer:true};}
           else if(g.merchant&&mx===g.merchant.x&&my===g.merchant.y){entitySprite={src:MERCHANT_SPRITE,isTall:true};}
           else{
-            const en=g.enemies.find(e=>e.hp>0&&e.x===mx&&e.y===my);
+            const en=enemyAt.get(key);
             if(en){const src=ENEMY_SPRITES[en.char];if(src)entitySprite={src,isTall:true,facing:en.facing||1};else entitySprite={char:en.char,color:en.color,facing:en.facing||1};}
             else if(mx===g.stairs.x&&my===g.stairs.y){itemSprite='stairs';}
             else{
-              const tr=g.traps.find(t=>t.x===mx&&t.y===my&&t.visible);
+              const tr=trapAt.get(key);
               if(tr){itemSprite={trap:true,color:tr.color,icon:tr.icon};}
-              else{const it=g.items.find(i2=>i2.x===mx&&i2.y===my);
+              else{const it=itemAt.get(key);
                 if(it){const ik=ITEM_SPRITES[it.char];const eq=it.name?EQUIP_SPRITES[it.name]:null;
                   const resolved=ik||eq;
                   if(typeof resolved==='string'&&resolved.startsWith('/'))itemSprite={png:resolved};
@@ -487,14 +492,13 @@ export default function Roguelike(){
         } else if(mx===g.stairs.x&&my===g.stairs.y&&isE){itemSprite='stairs';}
       }
 
-      // Floor/wall background
       const floorIdx=getFloorTileIdx(mx,my);
       const baseTile=(!inB||!(isV||isE))?null:isWall?TILE_SPRITES.wall_mid:TILE_SPRITES.floor[floorIdx];
-
-      // Floor edge detection
       const isFloor=baseTile&&!isWall;
       const wallAt=(wx,wy)=>wx<0||wx>=MAP_W||wy<0||wy>=MAP_H||g.map[wy][wx]===WALL;
+      const px=vx*ts,py=vy*ts;
 
+      // Tile layer (backgrounds only - filtered by parent)
       tiles.push(
         <div key={`${vx}-${vy}`} style={{
           width:ts,height:ts,position:'relative',overflow:'visible',opacity:op,boxSizing:'border-box',
@@ -508,47 +512,53 @@ export default function Roguelike(){
             borderLeft:wallAt(mx-1,my)?'2px solid rgba(200,220,255,0.4)':'none',
             borderRight:wallAt(mx+1,my)?'2px solid rgba(200,220,255,0.4)':'none',
             boxSizing:'border-box'}}/>}
-          {/* Item sprite (tileset or individual PNG) */}
-          {itemSprite?.png&&(
-            <div style={{position:'absolute',top:0,left:0,width:ts,height:ts,zIndex:2,backgroundImage:`url(${itemSprite.png})`,backgroundSize:'contain',backgroundRepeat:'no-repeat',backgroundPosition:'center',imageRendering:'pixelated',filter:tileFilterInv}}/>
-          )}
-          {itemSprite&&!itemSprite.png&&(itemSprite.direct||TILE_SPRITES[itemSprite])&&(
-            <div style={{position:'absolute',top:0,left:0,width:ts,height:ts,zIndex:2,...tileSpriteBg(itemSprite.direct||TILE_SPRITES[itemSprite])}}/>
-          )}
-          {itemSprite?.trap&&(
-            <div style={{position:'absolute',top:0,left:0,width:ts,height:ts,zIndex:2,display:'flex',alignItems:'center',justifyContent:'center',filter:tileFilterInv}}>
-              <div style={{width:ts*0.5,height:ts*0.5,background:itemSprite.color,transform:'rotate(45deg)',border:'2px solid #000',boxShadow:`0 0 8px ${itemSprite.color}, 0 0 16px ${itemSprite.color}88`}}/>
-              <span style={{position:'absolute',fontSize:ts*0.4,lineHeight:1,filter:'drop-shadow(0 1px 2px rgba(0,0,0,0.9))'}}>{itemSprite.icon}</span>
-            </div>
-          )}
-          {itemSprite==='stairs'&&(
-            <div style={{position:'absolute',top:0,left:0,width:ts,height:ts,zIndex:3,filter:tileFilterInv,pointerEvents:'none'}}>
-              <div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',borderRadius:'50%',background:'radial-gradient(circle,rgba(251,191,36,0.5) 0%,transparent 70%)',animation:'stairs-pulse 2s ease-in-out infinite'}}/>
-              <div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <span style={{fontSize:ts*0.4,color:'#fbbf24',textShadow:'0 1px 3px rgba(0,0,0,0.8)',animation:'stairs-arrow 1.5s ease-in-out infinite'}}>▼</span>
-              </div>
-            </div>
-          )}
-          {/* Entity sprite (individual PNG) */}
-          {entitySprite?.src&&(
-            <img key={entitySprite.isPlayer&&g.lastMove?`p${g.lastMove.t}`:undefined}
-              src={entitySprite.src} alt="" style={{
-              position:'absolute',bottom:0,left:'50%',
-              transform:`translateX(-50%) scaleX(${entitySprite.facing===-1?-1:1})`,
-              width:ts,height:entitySprite.isTall?ts*1.5:ts,
-              imageRendering:'pixelated',zIndex:3,pointerEvents:'none',
-              filter:tileFilterInv,
-              ...(entitySprite.isPlayer&&g.lastMove?{'--sx':`${-g.lastMove.dx*ts*0.28}px`,'--sy':`${-g.lastMove.dy*ts*0.28}px`,animation:'entity-slide 0.16s cubic-bezier(0.25,0.1,0.25,1)'}:{}),
-            }}/>
-          )}
-          {/* Fallback text for unmapped entities */}
-          {entitySprite&&!entitySprite.src&&(
-            <div style={{position:'absolute',top:0,left:0,width:ts,height:ts,display:'flex',alignItems:'center',justifyContent:'center',
-              fontSize:ts*0.46,color:entitySprite.color,fontWeight:'bold',zIndex:3}}>{entitySprite.char}</div>
-          )}
         </div>
       );
-    }return tiles;};
+
+      // Overlay layer (entities/items - NO CSS filter, separate DOM tree)
+      if(itemSprite?.png){
+        overlays.push(<div key={`o${vx}-${vy}`} style={{position:'absolute',left:px,top:py,width:ts,height:ts,opacity:op,backgroundImage:`url(${itemSprite.png})`,backgroundSize:'contain',backgroundRepeat:'no-repeat',backgroundPosition:'center',imageRendering:'pixelated'}}/>);
+      }
+      if(itemSprite&&!itemSprite.png&&!itemSprite.trap&&itemSprite!=='stairs'&&(itemSprite.direct||TILE_SPRITES[itemSprite])){
+        overlays.push(<div key={`o${vx}-${vy}`} style={{position:'absolute',left:px,top:py,width:ts,height:ts,opacity:op,...tileSpriteBg(itemSprite.direct||TILE_SPRITES[itemSprite])}}/>);
+      }
+      if(itemSprite?.trap){
+        overlays.push(
+          <div key={`o${vx}-${vy}`} style={{position:'absolute',left:px,top:py,width:ts,height:ts,opacity:op,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{width:ts*0.5,height:ts*0.5,background:itemSprite.color,transform:'rotate(45deg)',border:'2px solid #000',boxShadow:`0 0 6px ${itemSprite.color}`}}/>
+            <span style={{position:'absolute',fontSize:ts*0.4,lineHeight:1}}>{itemSprite.icon}</span>
+          </div>
+        );
+      }
+      if(itemSprite==='stairs'){
+        overlays.push(
+          <div key={`o${vx}-${vy}`} style={{position:'absolute',left:px,top:py,width:ts,height:ts,opacity:op,pointerEvents:'none'}}>
+            <div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',borderRadius:'50%',background:'radial-gradient(circle,rgba(251,191,36,0.5) 0%,transparent 70%)',animation:'stairs-pulse 2s ease-in-out infinite'}}/>
+            <div style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <span style={{fontSize:ts*0.4,color:'#fbbf24',textShadow:'0 1px 3px rgba(0,0,0,0.8)',animation:'stairs-arrow 1.5s ease-in-out infinite'}}>▼</span>
+            </div>
+          </div>
+        );
+      }
+      if(entitySprite?.src){
+        overlays.push(
+          <img key={entitySprite.isPlayer&&g.lastMove?`p${vx}-${vy}-${g.lastMove.t}`:`e${vx}-${vy}`}
+            src={entitySprite.src} alt="" style={{
+            position:'absolute',left:px,top:py+ts-(entitySprite.isTall?ts*1.5:ts),
+            width:ts,height:entitySprite.isTall?ts*1.5:ts,
+            transform:`scaleX(${entitySprite.facing===-1?-1:1})`,
+            imageRendering:'pixelated',pointerEvents:'none',opacity:op,
+            ...(entitySprite.isPlayer&&g.lastMove?{'--sx':`${-g.lastMove.dx*ts*0.28}px`,'--sy':`${-g.lastMove.dy*ts*0.28}px`,animation:'entity-slide 0.16s cubic-bezier(0.25,0.1,0.25,1)'}:{}),
+          }}/>
+        );
+      }
+      if(entitySprite&&!entitySprite.src){
+        overlays.push(
+          <div key={`o${vx}-${vy}`} style={{position:'absolute',left:px,top:py,width:ts,height:ts,display:'flex',alignItems:'center',justifyContent:'center',
+            fontSize:ts*0.46,color:entitySprite.color,fontWeight:'bold',opacity:op}}>{entitySprite.char}</div>
+        );
+      }
+    }return{tiles,overlays};};
 
   const canAct=(dx,dy)=>{
     if(dx===0&&dy===0) return true;
@@ -613,10 +623,12 @@ export default function Roguelike(){
           @keyframes stairs-arrow{0%,100%{transform:translateY(0);opacity:0.9}50%{transform:translateY(3px);opacity:0.5}}
           @keyframes entity-slide{from{translate:var(--sx) var(--sy)}to{translate:0 0}}
         `}</style>
-        <div style={{position:"relative",borderRadius:10,overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.4)"}}>
-          <div style={{display:"grid",gridTemplateColumns:`repeat(${VP},${ts}px)`,filter:tileFilter}}>{renderMap()}</div>
+        {(()=>{const{tiles,overlays}=renderMap();return <div style={{position:"relative",borderRadius:10,overflow:"hidden",boxShadow:"0 4px 20px rgba(0,0,0,0.4)"}}>
+          <div style={{display:"grid",gridTemplateColumns:`repeat(${VP},${ts}px)`,filter:tileFilter}}>{tiles}</div>
+          {/* Entity/item overlay - NO CSS filter (separate DOM tree) */}
+          <div style={{position:"absolute",top:0,left:0,width:mapPx,height:mapPx,pointerEvents:"none"}}>{overlays}</div>
           {/* Effect overlay */}
-          <div style={{position:"absolute",top:0,left:0,width:ts*VP,height:ts*VP,pointerEvents:"none",overflow:"hidden"}}>
+          <div style={{position:"absolute",top:0,left:0,width:mapPx,height:mapPx,pointerEvents:"none",overflow:"hidden"}}>
             {effects.filter(f=>f.type!=="move").map(f=>{
               const vx=(f.x!==undefined)?(f.x-g.px+VP_HALF)*ts:0;
               const vy=(f.y!==undefined)?(f.y-g.py+VP_HALF)*ts:0;
@@ -680,7 +692,7 @@ export default function Roguelike(){
               return null;
             })}
           </div>
-        </div>
+        </div>;})()}
 
         {/* Enemy HP overlay */}
         {nearE.length>0&&<div style={{position:"absolute",top:8,left:8,maxWidth:"60%",pointerEvents:"none"}}>
