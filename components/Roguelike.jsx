@@ -429,7 +429,7 @@ export default function Roguelike(){
   const ts=Math.floor((screenW-8)/VP);
   const mapPx=ts*VP;
 
-  const themeIdx=Math.min(Math.floor((g.floor-1)/2), THEME_FILTERS.length-1);
+  const themeIdx=Math.min(Math.floor((g.floor-1)/2), THEME_TINTS.length-1);
   const themeTint=THEME_TINTS[themeIdx];
   const scale=ts/16;
 
